@@ -1,5 +1,7 @@
 #include <iostream>
 #include <SDL.h>
+#include <SDL_timer.h>
+#include <SDL_image.h>
 
 int main(int argc, char **argv){
     //First we need to start up SDL, and make sure it went ok
@@ -9,7 +11,7 @@ int main(int argc, char **argv){
     }
     
     //Now create a window with title "Hello World" at 100, 100 on the screen with w:640 h:480 and show it
-    SDL_Window *win = SDL_CreateWindow("Hello World!", 100, 100, 640, 480, SDL_WINDOW_SHOWN);
+    SDL_Window *win = SDL_CreateWindow("Hello World!", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 640, 480, SDL_WINDOW_SHOWN);
     //Make sure creating our window went ok
     if (win == nullptr){
         std::cout << "SDL_CreateWindow Error: " << SDL_GetError() << std::endl;
@@ -31,9 +33,9 @@ int main(int argc, char **argv){
 
     //SDL 2.0 now uses textures to draw things but SDL_LoadBMP returns a surface
     //this lets us choose when to upload or remove textures from the GPU
-    std::string imagePath = "res/hello.bmp";
-    SDL_Surface *bmp = SDL_LoadBMP(imagePath.c_str());
-    if (bmp == nullptr){
+    std::string imagePath = "res/tictactoe.png";
+    SDL_Surface *png = IMG_Load(imagePath.c_str());
+    if (png == nullptr){
         SDL_DestroyRenderer(ren);
         SDL_DestroyWindow(win);
         std::cout << "SDL_LoadBMP Error: " << SDL_GetError() << std::endl;
@@ -43,9 +45,9 @@ int main(int argc, char **argv){
 
     //To use a hardware accelerated texture for rendering we can create one from
     //the surface we loaded
-    SDL_Texture *tex = SDL_CreateTextureFromSurface(ren, bmp);
+    SDL_Texture *tex = SDL_CreateTextureFromSurface(ren, png);
     //We no longer need the surface
-    SDL_FreeSurface(bmp);
+    SDL_FreeSurface(png);
     if (tex == nullptr){
         SDL_DestroyRenderer(ren);
         SDL_DestroyWindow(win);

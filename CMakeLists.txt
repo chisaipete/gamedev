@@ -25,6 +25,13 @@ message(STATUS "Include directory: " ${SDL2_INCLUDE_DIR})
 message(STATUS "Libraries: " ${SDL2_LIBRARY})
 include_directories(${SDL2_INCLUDE_DIR})
 
+#SDL2_image
+set(SDL2_IMAGE "C:/SDL2_image-2.0.3")
+find_package(SDL2_image REQUIRED)
+message(STATUS "Include directory: " ${SDL2_IMAGE_INCLUDE_DIR})
+message(STATUS "Libraries: " ${SDL2_IMAGE_LIBRARY})
+include_directories(${SDL2_IMAGE_INCLUDE_DIR})
+
 # #libtcod
 # set(LIBTCOD "C:/libtcod-1.6.7")
 # find_package(LIBTCOD REQUIRED)
@@ -39,5 +46,5 @@ add_executable(hangman hangman.cpp)
 
 set(SOURCE_FILES tic_tac_toe.cpp)
 add_executable(tic_tac_toe ${SOURCE_FILES})
-target_link_libraries(tic_tac_toe ${SDL2_LIBRARY})
+target_link_libraries(tic_tac_toe ${SDL2_LIBRARY} ${SDL2_IMAGE_LIBRARY})
 
