@@ -39,10 +39,9 @@ include_directories(${SDL2_IMAGE_INCLUDE_DIR})
 # message(STATUS "Libraries: " ${LIBTCOD_LIBRARY})
 # include_directories(${LIBTCOD_INCLUDE_DIR})
 
-add_executable(guess_the_number guess_the_number.cpp)
+# add_executable(guess_the_number guess_the_number.cpp)
 
-add_executable(hangman hangman.cpp)
-# target_link_libraries(hangman ${SDL2_LIBRARY} ${LIBTCOD_LIBRARY})
+# add_executable(hangman hangman.cpp)
 
 set(SOURCE_FILES tic_tac_toe.cpp)
 add_executable(tic_tac_toe ${SOURCE_FILES})
