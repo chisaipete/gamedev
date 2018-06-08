@@ -13,38 +13,191 @@ unsigned long long rdtsc(){
 }
 
 const int TILE_SIZE = 32;
-
-const int SCREEN_WIDTH = TILE_SIZE*5;
-const int SCREEN_HEIGHT = TILE_SIZE*5;
+const int SCREEN_TILE_WIDTH = 20;
+const int SCREEN_TILE_HEIGHT = 15;
+const int SCREEN_WIDTH = TILE_SIZE*SCREEN_TILE_WIDTH; //640
+const int SCREEN_HEIGHT = TILE_SIZE*SCREEN_TILE_HEIGHT; //480
+const int BRICK_WIDTH = SCREEN_TILE_WIDTH-2;
+const int BRICK_HEIGHT = SCREEN_TILE_HEIGHT;
+const int BRICK_TILE_HEIGHT = 12;
+const int MAX_BALL_VELOCITY = 10;
 
 //tilemap indexes
-#define    _X_ (0)
-#define _HORZ_ (1)
-#define _DIAG_ (2)
-#define    _O_ (3)
-#define _CENT_ (4)
-#define _EDGE_ (5)
-#define _CRNR_ (6)
-#define _EMTY_ (7)
-#define _VERT_ (8)
-#define _DIAR_ (9)
+#define EMPTY              (-1)
+#define RED_BRICK          ( 0)
+#define GREEN_BRICK        ( 1)
+#define BLUE_BRICK         ( 2)
+#define VIOLET_BRICK       ( 3)
+#define YELLOW_BRICK       ( 4)
+#define BALL               ( 5)
+#define LONG_PADDLE_LEFT   ( 6)
+#define LONG_PADDLE_CENTER ( 7)
+#define LONG_PADDLE_RIGHT  ( 8)
+#define PADDLE             ( 9)
+#define LEFT_ARENA_CORNER  (10)
+#define RIGHT_ARENA_CORNER (11)
+#define LEFT_ARENA_WALL    (12)
+#define RIGHT_ARENA_WALL   (13)
+#define FIRE_BALL          (14)
 
-SDL_Rect sprites[8];
+SDL_Rect sprites[15];
 
 SDL_Color WHITE = { 255, 255, 255, 255 };
 
-struct GameState {
-    bool turn; //which player's turn?
-    bool gameover; //is the game over?
-    bool tie; //last player active is the winner, what if it's a tie?
-    int marked_spaces;
-    int board[9];
-    int marks[9];
+SDL_Window* window = NULL;
+SDL_Renderer* renderer = NULL;
+SDL_Texture* tilemap = NULL;
+
+struct Ball {
+    int ball_type;
+    SDL_Point ball_pos;
+    SDL_Point velocity;
 };
+
+struct GameState {
+    bool gameover; //is the game over?
+    bool paused;
+    int score;
+    int balls; //lives
+    SDL_Point paddle_pos;
+    int paddle_size;
+    Ball active_balls[3];
+    int bricks[BRICK_WIDTH*BRICK_HEIGHT];
+};
+
+GameState gamestate;
 
 void logSDLError(std::ostream &os, const std::string &msg) {
     os << msg << " SDL Error: " << SDL_GetError() << std::endl;
 }
+
+bool init() {
+    bool success = true;
+
+    if (SDL_Init(SDL_INIT_VIDEO) != 0){
+        logSDLError(std::cout, "SDL_Init");
+        success = false;
+    } else {       
+        if (TTF_Init() != 0){  //Future: do we need to call IMG_Init, it seems to work without it...is speed a factor? IMG_GetError might be needed
+            logSDLError(std::cout, "TTF_Init");
+            success = false;
+        } else {
+            window = SDL_CreateWindow("Breakout", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
+            if (window == nullptr){
+                logSDLError(std::cout, "SDL_CreateWindow");
+                success = false;
+            } else {
+                renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+                if (renderer == nullptr){
+                    logSDLError(std::cout, "SDL_CreateRenderer");
+                    success = false;
+                } else {
+                    //Initialize renderer color (also used for clearing)
+                    // SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, 0xFF); 
+                    SDL_SetRenderDrawColor(renderer, 0x0, 0x0, 0x0, 0xFF); //black
+                }
+            }
+        }
+    }
+    srand(rdtsc()); //seed random nicely
+
+    return success;
+}
+
+bool load() {
+    bool success = true;
+
+    std::string imagePath = "res/bricks.png";
+    tilemap = IMG_LoadTexture(renderer, imagePath.c_str());
+    if (tilemap == nullptr){ //could also load to surface, then optimize with SDL_ConvertSurface?
+        logSDLError(std::cout, "IMG_LoadTexture");
+        success = false;
+    } else {
+        //setup tiles
+        sprites[RED_BRICK].x = 0;
+        sprites[RED_BRICK].y = 0;
+        sprites[RED_BRICK].w = TILE_SIZE;
+        sprites[RED_BRICK].h = TILE_SIZE;
+        sprites[GREEN_BRICK].x = TILE_SIZE*1;
+        sprites[GREEN_BRICK].y = 0;
+        sprites[GREEN_BRICK].w = TILE_SIZE;
+        sprites[GREEN_BRICK].h = TILE_SIZE;
+        sprites[BLUE_BRICK].x = TILE_SIZE*2;
+        sprites[BLUE_BRICK].y = 0;
+        sprites[BLUE_BRICK].w = TILE_SIZE;
+        sprites[BLUE_BRICK].h = TILE_SIZE;
+        sprites[VIOLET_BRICK].x = 0;
+        sprites[VIOLET_BRICK].y = TILE_SIZE;
+        sprites[VIOLET_BRICK].w = TILE_SIZE;
+        sprites[VIOLET_BRICK].h = TILE_SIZE;
+        sprites[YELLOW_BRICK].x = TILE_SIZE*1;
+        sprites[YELLOW_BRICK].y = TILE_SIZE;
+        sprites[YELLOW_BRICK].w = TILE_SIZE;
+        sprites[YELLOW_BRICK].h = TILE_SIZE;
+        sprites[BALL].x = TILE_SIZE*2;
+        sprites[BALL].y = TILE_SIZE;
+        sprites[BALL].w = TILE_SIZE;
+        sprites[BALL].h = TILE_SIZE;
+        sprites[LONG_PADDLE_LEFT].x = 0;
+        sprites[LONG_PADDLE_LEFT].y = TILE_SIZE*2;
+        sprites[LONG_PADDLE_LEFT].w = TILE_SIZE;
+        sprites[LONG_PADDLE_LEFT].h = TILE_SIZE;
+        sprites[LONG_PADDLE_CENTER].x = TILE_SIZE*1;
+        sprites[LONG_PADDLE_CENTER].y = TILE_SIZE*2;
+        sprites[LONG_PADDLE_CENTER].w = TILE_SIZE;
+        sprites[LONG_PADDLE_CENTER].h = TILE_SIZE;
+        sprites[LONG_PADDLE_RIGHT].x = TILE_SIZE*2;
+        sprites[LONG_PADDLE_RIGHT].y = TILE_SIZE*2;
+        sprites[LONG_PADDLE_RIGHT].w = TILE_SIZE;
+        sprites[LONG_PADDLE_RIGHT].h = TILE_SIZE;
+        sprites[PADDLE].x = 0;
+        sprites[PADDLE].y = TILE_SIZE*3;
+        sprites[PADDLE].w = TILE_SIZE;
+        sprites[PADDLE].h = TILE_SIZE;
+        sprites[LEFT_ARENA_CORNER].x = TILE_SIZE*1;
+        sprites[LEFT_ARENA_CORNER].y = TILE_SIZE*3;
+        sprites[LEFT_ARENA_CORNER].w = TILE_SIZE;
+        sprites[LEFT_ARENA_CORNER].h = TILE_SIZE;
+        sprites[RIGHT_ARENA_CORNER].x = TILE_SIZE*2;
+        sprites[RIGHT_ARENA_CORNER].y = TILE_SIZE*3;
+        sprites[RIGHT_ARENA_CORNER].w = TILE_SIZE;
+        sprites[RIGHT_ARENA_CORNER].h = TILE_SIZE;
+        sprites[LEFT_ARENA_WALL].x = 0;
+        sprites[LEFT_ARENA_WALL].y = TILE_SIZE*4;
+        sprites[LEFT_ARENA_WALL].w = TILE_SIZE;
+        sprites[LEFT_ARENA_WALL].h = TILE_SIZE;
+        sprites[RIGHT_ARENA_WALL].x = TILE_SIZE*1;
+        sprites[RIGHT_ARENA_WALL].y = TILE_SIZE*4;
+        sprites[RIGHT_ARENA_WALL].w = TILE_SIZE;
+        sprites[RIGHT_ARENA_WALL].h = TILE_SIZE;
+        sprites[FIRE_BALL].x = TILE_SIZE*2;
+        sprites[FIRE_BALL].y = TILE_SIZE*4;
+        sprites[FIRE_BALL].w = TILE_SIZE;
+        sprites[FIRE_BALL].h = TILE_SIZE;
+    }
+
+    return success;
+}
+
+bool close() {
+    if (tilemap != nullptr) { SDL_DestroyTexture(tilemap); tilemap = NULL; }
+    if (renderer != nullptr) { SDL_DestroyRenderer(renderer); renderer = NULL; }
+    if (window != nullptr) { SDL_DestroyWindow(window); window = NULL; }
+    // IMG_Quit();
+    TTF_Quit();
+    SDL_Quit();
+}
+
+//LazyFoo 7
+// SDL_Texture* loadTexture(std::string path) {
+//     //final texture
+//     SDL_Texture* newTexture = NULL;
+
+//     //Load image from path
+//     SDL_Surface* loadedSurface = 
+// }
+
+//LazyFoo 10 - color keying, define texture wrapper class
 
 SDL_Texture* loadText_to_Texture(const std::string &message, SDL_Renderer* ren, const std::string &fontFile = "res/cc.ttf", SDL_Color color = WHITE, int fontSize = 12) {
     //Open the font
@@ -111,397 +264,227 @@ void renderTextureEx(SDL_Texture* tex, SDL_Renderer* ren, int x, int y, SDL_Rect
     renderTextureEx(tex, ren, dst, clip, angle, center, flip);
 }
 
-void renderBoard(SDL_Renderer *ren, SDL_Texture *tilemap, GameState &gamestate) {
-    //draw base
-    for (int y = 0; y < 5; y++) {
-        for (int x = 0; x < 5; x++) {
-            if ( x == 0 || x == 4 || y == 0 || y == 4 ) {//draw border                
-                renderTexture(tilemap, ren, x*TILE_SIZE, y*TILE_SIZE, &sprites[_EMTY_]);
-            } else if ( x == 1 ) {                
-                if ( y == 1 ) //draw UL Corner
-                    renderTextureEx(tilemap, ren, x*TILE_SIZE, y*TILE_SIZE, &sprites[_CRNR_]);
-                if ( y == 2 ) //draw L  Edge    //flip horizontal
-                    renderTextureEx(tilemap, ren, x*TILE_SIZE, y*TILE_SIZE, &sprites[_EDGE_], 0, NULL, SDL_FLIP_HORIZONTAL); 
-                if ( y == 3 ) //draw LL Corner  //rotate 90 left
-                    renderTextureEx(tilemap, ren, x*TILE_SIZE, y*TILE_SIZE, &sprites[_CRNR_], -90, NULL); 
-            } else if ( x == 2 ) {
-                if ( y == 1 ) //draw T  Edge    //rotate 90 left
-                    renderTextureEx(tilemap, ren, x*TILE_SIZE, y*TILE_SIZE, &sprites[_EDGE_], -90, NULL); 
-                if ( y == 2 ) //draw Center
-                    renderTexture(tilemap, ren, x*TILE_SIZE, y*TILE_SIZE, &sprites[_CENT_]);
-                if ( y == 3 ) //draw B  Edge    //rotate 90 right
-                    renderTextureEx(tilemap, ren, x*TILE_SIZE, y*TILE_SIZE, &sprites[_EDGE_], 90, NULL);
-            } else if ( x == 3 ) {
-                if ( y == 1 ) //draw UR Corner  //flip horizontal
-                    renderTextureEx(tilemap, ren, x*TILE_SIZE, y*TILE_SIZE, &sprites[_CRNR_], 0, NULL, SDL_FLIP_HORIZONTAL);
-                if ( y == 2 ) //draw R  Edge
-                    renderTextureEx(tilemap, ren, x*TILE_SIZE, y*TILE_SIZE, &sprites[_EDGE_]);
-                if ( y == 3 ) //draw LR Corner  //rotate 180 left/right
-                    renderTextureEx(tilemap, ren, x*TILE_SIZE, y*TILE_SIZE, &sprites[_CRNR_], 180, NULL);
+void renderArena(SDL_Renderer *ren, SDL_Texture *tm, GameState &gamestate) {
+    //write background, then arena, then bricks, then paddle and then ball
+    //could optimize this by drawing the arena once, then storing it in a layer to blit
+    //draw arena 
+    for (int y = 0; y < SCREEN_TILE_HEIGHT; y++) {
+        for (int x = 0; x < SCREEN_TILE_WIDTH; x++) {
+            if (x == 0) {
+                if (y > 0 ) {
+                    renderTexture(tm, ren, x*TILE_SIZE, y*TILE_SIZE, &sprites[LEFT_ARENA_WALL]);
+                } else {
+                    renderTexture(tm, ren, x*TILE_SIZE, y*TILE_SIZE, &sprites[LEFT_ARENA_CORNER]);
+                }
+            } else if (x == SCREEN_TILE_WIDTH-1) {
+                if (y > 0 ) {
+                    renderTexture(tm, ren, x*TILE_SIZE, y*TILE_SIZE, &sprites[RIGHT_ARENA_WALL]);
+                } else if (y == 0){
+                    renderTexture(tm, ren, x*TILE_SIZE, y*TILE_SIZE, &sprites[RIGHT_ARENA_CORNER]);
+                }
             }
-        }
-    }
-
-    //draw player marks
-    for (int y = 0; y < 3; y++) {
-        for (int x = 0; x < 3; x++) {
-            switch (gamestate.board[3*y+x]) {
-                case _X_:
-                    renderTexture(tilemap, ren, x*TILE_SIZE+TILE_SIZE, y*TILE_SIZE+TILE_SIZE, &sprites[_X_]);
-                    break;
-                case _O_:
-                    renderTexture(tilemap, ren, x*TILE_SIZE+TILE_SIZE, y*TILE_SIZE+TILE_SIZE, &sprites[_O_]);
-                    break;
-                case _EMTY_:
-                default:
-                    break;
-            }
-        }
-    }
-    
-    if (gamestate.gameover && !gamestate.tie) {
-        //draw winning marks
-        for (int y = 0; y < 3; y++) {
-            for (int x = 0; x < 3; x++) {
-                switch (gamestate.marks[3*y+x]) {
-                    case _HORZ_:
-                        renderTexture(tilemap, ren, x*TILE_SIZE+TILE_SIZE, y*TILE_SIZE+TILE_SIZE, &sprites[_HORZ_]);
-                        break;
-                    case _VERT_:
-                        renderTextureEx(tilemap, ren, x*TILE_SIZE+TILE_SIZE, y*TILE_SIZE+TILE_SIZE, &sprites[_HORZ_], 90, NULL);
-                        break;
-                    case _DIAG_:
-                        renderTexture(tilemap, ren, x*TILE_SIZE+TILE_SIZE, y*TILE_SIZE+TILE_SIZE, &sprites[_DIAG_]);
-                        break;
-                    case _DIAR_:
-                        renderTextureEx(tilemap, ren, x*TILE_SIZE+TILE_SIZE, y*TILE_SIZE+TILE_SIZE, &sprites[_DIAG_], 90, NULL);
-                        break;
-                    case _EMTY_:
-                    default:
-                        break;
+            if (y == 0) {
+                if (x > 0 && x < SCREEN_TILE_WIDTH-1) {
+                    renderTextureEx(tm, ren, x*TILE_SIZE, y*TILE_SIZE, &sprites[LEFT_ARENA_WALL], 90, NULL);
                 }
             }
         }
     }
+    //draw bricks (12px tall, full tile is 32px, 10px buffer around each, 32px wide)
+    for (int y = 0; y < BRICK_HEIGHT; y++) {
+        for (int x = 0; x < BRICK_WIDTH; x++) {
+            renderTexture(tm, ren, (x+1)*TILE_SIZE, y*BRICK_TILE_HEIGHT, &sprites[gamestate.bricks[BRICK_WIDTH*y+x]]);
+        }
+    }
+
+    //draw paddle
+    switch (gamestate.paddle_size) {
+        case 1:
+            renderTexture(tm, ren, gamestate.paddle_pos.x, gamestate.paddle_pos.y, &sprites[PADDLE]);
+            break;
+        default:
+            break;
+    }
+    
+    //draw ball
+    for (int i = 0; i < 3; i++) {  //up to 3 balls
+        switch (gamestate.active_balls[i].ball_type) {
+            case FIRE_BALL:
+                renderTexture(tm, ren, gamestate.active_balls[i].ball_pos.x, gamestate.active_balls[i].ball_pos.y, &sprites[FIRE_BALL]);
+                break;
+            case BALL:
+                renderTexture(tm, ren, gamestate.active_balls[i].ball_pos.x, gamestate.active_balls[i].ball_pos.y, &sprites[BALL]);
+                break;
+            default:
+                //EMPTY
+                break;
+        }
+    }
 }
 
-void renderStatus(SDL_Renderer *ren, GameState &gamestate) {
-    if (!gamestate.gameover) {
-        if (gamestate.turn) {
-            SDL_Texture* image = loadText_to_Texture("It's my turn!", ren);
-            int iW, iH;
-            SDL_QueryTexture(image, NULL, NULL, &iW, &iH);
-            renderTexture(image, ren, SCREEN_WIDTH/2 - iW/2, SCREEN_HEIGHT-TILE_SIZE/2);
-        } else {
-            SDL_Texture* image = loadText_to_Texture("It's the human's turn.", ren);
-            int iW, iH;
-            SDL_QueryTexture(image, NULL, NULL, &iW, &iH);
-            renderTexture(image, ren, SCREEN_WIDTH/2 - iW/2, SCREEN_HEIGHT-TILE_SIZE/2);
-        }
-    } else {
-        if (gamestate.tie) {
-            SDL_Texture* image = loadText_to_Texture("A tie.", ren);
-            int iW, iH;
-            SDL_QueryTexture(image, NULL, NULL, &iW, &iH);
-            renderTexture(image, ren, SCREEN_WIDTH/2 - iW/2, SCREEN_HEIGHT-TILE_SIZE/2);
-        } else if (gamestate.turn) {            
-            SDL_Texture* image = loadText_to_Texture("I won!", ren);
-            int iW, iH;
-            SDL_QueryTexture(image, NULL, NULL, &iW, &iH);
-            renderTexture(image, ren, SCREEN_WIDTH/2 - iW/2, SCREEN_HEIGHT-TILE_SIZE/2);
-        } else {
-            SDL_Texture* image = loadText_to_Texture("The human won.", ren);
-            int iW, iH;
-            SDL_QueryTexture(image, NULL, NULL, &iW, &iH);
-            renderTexture(image, ren, SCREEN_WIDTH/2 - iW/2, SCREEN_HEIGHT-TILE_SIZE/2);
+// void renderStatus(SDL_Renderer *ren, GameState &gamestate) {
+//     if (!gamestate.gameover) {
+//         if (gamestate.turn) {
+//             SDL_Texture* image = loadText_to_Texture("It's my turn!", ren);
+//             int iW, iH;
+//             SDL_QueryTexture(image, NULL, NULL, &iW, &iH);
+//             renderTexture(image, ren, SCREEN_WIDTH/2 - iW/2, SCREEN_HEIGHT-TILE_SIZE/2);
+//         } else {
+//             SDL_Texture* image = loadText_to_Texture("It's the human's turn.", ren);
+//             int iW, iH;
+//             SDL_QueryTexture(image, NULL, NULL, &iW, &iH);
+//             renderTexture(image, ren, SCREEN_WIDTH/2 - iW/2, SCREEN_HEIGHT-TILE_SIZE/2);
+//         }
+//     } else {
+//         if (gamestate.tie) {
+//             SDL_Texture* image = loadText_to_Texture("A tie.", ren);
+//             int iW, iH;
+//             SDL_QueryTexture(image, NULL, NULL, &iW, &iH);
+//             renderTexture(image, ren, SCREEN_WIDTH/2 - iW/2, SCREEN_HEIGHT-TILE_SIZE/2);
+//         } else if (gamestate.turn) {            
+//             SDL_Texture* image = loadText_to_Texture("I won!", ren);
+//             int iW, iH;
+//             SDL_QueryTexture(image, NULL, NULL, &iW, &iH);
+//             renderTexture(image, ren, SCREEN_WIDTH/2 - iW/2, SCREEN_HEIGHT-TILE_SIZE/2);
+//         } else {
+//             SDL_Texture* image = loadText_to_Texture("The human won.", ren);
+//             int iW, iH;
+//             SDL_QueryTexture(image, NULL, NULL, &iW, &iH);
+//             renderTexture(image, ren, SCREEN_WIDTH/2 - iW/2, SCREEN_HEIGHT-TILE_SIZE/2);
+//         }
+//     }
+// }
+
+void loadLevel(GameState &gamestate, int LevelNum = 0) {
+    switch (LevelNum) {
+        case 1:
+            //simple rainbow
+            for (int y = 0; y < BRICK_HEIGHT; y++) {
+                for (int x = 0; x < BRICK_WIDTH; x++) {
+                    switch (y % 5) {
+                        case RED_BRICK:
+                            gamestate.bricks[BRICK_WIDTH*y+x] = RED_BRICK;
+                            break;
+                        case GREEN_BRICK:
+                            gamestate.bricks[BRICK_WIDTH*y+x] = GREEN_BRICK;
+                            break;
+                        case BLUE_BRICK:
+                            gamestate.bricks[BRICK_WIDTH*y+x] = BLUE_BRICK;
+                            break;
+                        case VIOLET_BRICK:
+                            gamestate.bricks[BRICK_WIDTH*y+x] = VIOLET_BRICK;
+                            break;
+                        case YELLOW_BRICK:
+                            gamestate.bricks[BRICK_WIDTH*y+x] = YELLOW_BRICK;
+                            break;
+                    }
+                    
+                }
+            }
+            break;
+        default:
+            //populate empty bricks
+            for (int y = 0; y < BRICK_HEIGHT; y++) {
+                for (int x = 0; x < BRICK_WIDTH; x++) {
+                    gamestate.bricks[BRICK_WIDTH*y+x] = EMPTY;
+                }
+            }
+            break;
+    }
+}
+
+void moveBalls(GameState &gamestate) {
+    for (int i = 0; i < 3; i++) {  //up to 3 balls
+        switch (gamestate.active_balls[i].ball_type) {
+            case FIRE_BALL:
+            case BALL:
+                gamestate.active_balls[i].ball_pos.x += gamestate.active_balls[i].velocity.x;
+                gamestate.active_balls[i].ball_pos.y += gamestate.active_balls[i].velocity.y;
+                break;
+            default:
+                break;
         }
     }
 }
 
 int main(int argc, char **argv) {
-    srand(rdtsc()); //seed random nicely
-    if (SDL_Init(SDL_INIT_VIDEO) != 0){
-        logSDLError(std::cout, "SDL_Init");
-        return 1;
-    }
+    if (!init()) {
+        std::cout << "Initialization Failed" << std::endl;
+    } else {
+        if (!load()) {
+            std::cout << "Loading Failed" << std::endl;
+        } else {
+            int quit = 0;
+            //setup gamestate and first level loadout (maybe spit into two structs??)
+            gamestate.gameover = false;
+            gamestate.paused = false;
+            gamestate.score = 0;
+            gamestate.balls = 3;
+            gamestate.paddle_pos = {SCREEN_WIDTH/2 - TILE_SIZE/2, SCREEN_HEIGHT-TILE_SIZE - TILE_SIZE/2};
+            gamestate.paddle_size = 1;
+            gamestate.active_balls[0].ball_type = BALL;
+            gamestate.active_balls[0].ball_pos = {SCREEN_WIDTH/2 - TILE_SIZE/2, SCREEN_HEIGHT-TILE_SIZE-BRICK_TILE_HEIGHT - TILE_SIZE/2};
+            gamestate.active_balls[0].velocity = {0,0};
+            gamestate.active_balls[1].ball_type = EMPTY;
+            gamestate.active_balls[1].ball_pos = {0,0};
+            gamestate.active_balls[1].velocity = {0,0};
+            gamestate.active_balls[2].ball_type = EMPTY;
+            gamestate.active_balls[2].ball_pos = {0,0};
+            gamestate.active_balls[2].velocity = {0,0};
+            loadLevel(gamestate, 1);
 
-    if (TTF_Init() != 0){
-        logSDLError(std::cout, "TTF_Init");
-        SDL_Quit();
-        return 1;
-    }
-    
-    SDL_Window *window = SDL_CreateWindow("Tic-Tac-Toe", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
-    if (window == nullptr){
-        logSDLError(std::cout, "SDL_CreateWindow");
-        SDL_Quit();
-        return 1;
-    }
+            while (!quit) {
+                SDL_Event event;
 
-    SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-    if (renderer == nullptr){
-        SDL_DestroyWindow(window);
-        logSDLError(std::cout, "SDL_CreateRenderer");
-        SDL_Quit();
-        return 1;
-    }
-
-    std::string imagePath = "res/tictactoe.png";
-    SDL_Texture *tilemap = IMG_LoadTexture(renderer, imagePath.c_str());
-    if (tilemap == nullptr){
-        SDL_DestroyRenderer(renderer);
-        SDL_DestroyWindow(window);
-        logSDLError(std::cout, "IMG_LoadTexture");
-        SDL_Quit();
-        return 1;
-    }
-
-    //setup tiles
-    sprites[_X_].x = 0;
-    sprites[_X_].y = 0;
-    sprites[_X_].w = TILE_SIZE;
-    sprites[_X_].h = TILE_SIZE;
-    sprites[_HORZ_].x = TILE_SIZE*1;
-    sprites[_HORZ_].y = 0;
-    sprites[_HORZ_].w = TILE_SIZE;
-    sprites[_HORZ_].h = TILE_SIZE;
-    sprites[_DIAG_].x = TILE_SIZE*2;
-    sprites[_DIAG_].y = 0;
-    sprites[_DIAG_].w = TILE_SIZE;
-    sprites[_DIAG_].h = TILE_SIZE;
-    sprites[_O_].x = 0;
-    sprites[_O_].y = TILE_SIZE;
-    sprites[_O_].w = TILE_SIZE;
-    sprites[_O_].h = TILE_SIZE;
-    sprites[_CENT_].x = TILE_SIZE*1;
-    sprites[_CENT_].y = TILE_SIZE;
-    sprites[_CENT_].w = TILE_SIZE;
-    sprites[_CENT_].h = TILE_SIZE;
-    sprites[_EDGE_].x = TILE_SIZE*2;
-    sprites[_EDGE_].y = TILE_SIZE;
-    sprites[_EDGE_].w = TILE_SIZE;
-    sprites[_EDGE_].h = TILE_SIZE;
-    sprites[_CRNR_].x = 0;
-    sprites[_CRNR_].y = TILE_SIZE*2;
-    sprites[_CRNR_].w = TILE_SIZE;
-    sprites[_CRNR_].h = TILE_SIZE;
-    sprites[_EMTY_].x = TILE_SIZE*1;
-    sprites[_EMTY_].y = TILE_SIZE*2;
-    sprites[_EMTY_].w = TILE_SIZE;
-    sprites[_EMTY_].h = TILE_SIZE;
-
-    //setup gamestate {turn, gameover, tie, marked_spaces, board, marks}
-    GameState gamestate = {
-        false, 
-        false, 
-        false,
-        0,
-        {_EMTY_, _EMTY_, _EMTY_,
-         _EMTY_, _EMTY_, _EMTY_,
-         _EMTY_, _EMTY_, _EMTY_},
-        {_EMTY_, _EMTY_, _EMTY_,
-         _EMTY_, _EMTY_, _EMTY_,
-         _EMTY_, _EMTY_, _EMTY_},
-    };
-    
-    int quit = 0;
-    int turnTime = 0;
-
-    while (!quit) {
-        SDL_Event event;
-
-        while (SDL_PollEvent(&event)) {
-            switch (event.type) {
-                case SDL_QUIT:
-                    quit = 1;
-                    break;
-            /*
-                case SDL_KEYDOWN:
-                    switch (event.key.keysym.scancode) {
-                        case SDL_SCANCODE_W:
-                        case SDL_SCANCODE_UP:
-                            break;
-                        case SDL_SCANCODE_A:
-                        case SDL_SCANCODE_LEFT:
-                            break;
-                        case SDL_SCANCODE_S:
-                        case SDL_SCANCODE_DOWN:
-                            break;
-                        case SDL_SCANCODE_D:
-                        case SDL_SCANCODE_RIGHT:
+                while (SDL_PollEvent(&event)) {
+                    switch (event.type) {
+                        case SDL_QUIT:
+                            quit = 1;
                             break;
                     }
-                    break;
-
-                case SDL_KEYUP:
-                    switch (event.key.keysym.scancode) {
-                    case SDL_SCANCODE_W:
-                    case SDL_SCANCODE_UP:
-                        break;
-                    case SDL_SCANCODE_A:
-                    case SDL_SCANCODE_LEFT:
-                        break;
-                    case SDL_SCANCODE_S:
-                    case SDL_SCANCODE_DOWN:
-                        break;
-                    case SDL_SCANCODE_D:
-                    case SDL_SCANCODE_RIGHT:
-                        break;
+                    if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE ) {
+                        quit = 1;
                     }
-                    break;
-            */
-            }
-        }
-
-        if (!gamestate.gameover) {
-            if (!gamestate.turn) {
-                //handle mouse events
-                int mouse_x, mouse_y;
-                int buttons = SDL_GetMouseState(&mouse_x, &mouse_y);
-                int x = -1;
-                int y = -1;
-
-                if ( mouse_x >= TILE_SIZE && mouse_x < TILE_SIZE*2 ) {
-                    x = 0;
-                } else if ( mouse_x >= TILE_SIZE*2 && mouse_x < TILE_SIZE*3 ) {
-                    x = 1;
-                } else if ( mouse_x >= TILE_SIZE*3 && mouse_x < TILE_SIZE*4 ) {
-                    x = 2;
-                }
-
-                if (mouse_y >= TILE_SIZE && mouse_y < TILE_SIZE*2 ) {
-                    y = 0;
-                } else if ( mouse_y >= TILE_SIZE*2 && mouse_y < TILE_SIZE*3 ) {
-                    y = 1;
-                } else if (mouse_y >= TILE_SIZE*3 && mouse_y < TILE_SIZE*4 ) {
-                    y = 2;
-                }
-
-                if ( x > -1 && y > -1) {
-                    if (buttons & SDL_BUTTON(SDL_BUTTON_LEFT)) {
-                        // add an X if the mouse is over a tile and left button is pressed
-                        int move = 3*y+x;
-                        if (gamestate.board[move] == _EMTY_) {
-                            gamestate.board[move] = _X_;
-                            gamestate.marked_spaces += 1;
-                            gamestate.turn = !gamestate.turn;
-                            turnTime = SDL_GetTicks();
+                    if (event.type == SDL_KEYDOWN && event.key.repeat == 0) {
+                        switch(event.key.keysym.sym) {
+                            case SDLK_UP:    gamestate.active_balls[0].velocity.y -= MAX_BALL_VELOCITY; break;
+                            case SDLK_DOWN:  gamestate.active_balls[0].velocity.y += MAX_BALL_VELOCITY; break;
+                            case SDLK_LEFT:  gamestate.active_balls[0].velocity.x -= MAX_BALL_VELOCITY; break;
+                            case SDLK_RIGHT: gamestate.active_balls[0].velocity.x += MAX_BALL_VELOCITY; break;
                         }
-                    } 
-                /*
-                    else if (buttons & SDL_BUTTON(SDL_BUTTON_RIGHT)) {
-                        // add an O if the mouse is over a tile and right button is pressed
-                        gamestate.board[3*y+x] = _O_;
+                    } else if(event.type == SDL_KEYUP && event.key.repeat == 0) {
+                        //Adjust the velocity
+                        switch(event.key.keysym.sym) {
+                            case SDLK_UP:    gamestate.active_balls[0].velocity.y += MAX_BALL_VELOCITY; break;
+                            case SDLK_DOWN:  gamestate.active_balls[0].velocity.y -= MAX_BALL_VELOCITY; break;
+                            case SDLK_LEFT:  gamestate.active_balls[0].velocity.x += MAX_BALL_VELOCITY; break;
+                            case SDLK_RIGHT: gamestate.active_balls[0].velocity.x -= MAX_BALL_VELOCITY; break;
+                        }
                     }
-                */
                 }
-            } else {
-                // handle mouse "jitter"
-                int delta = SDL_GetTicks() - turnTime;
-                if (delta > 300) {
-                    //Player 2 (AI) Turn
-                    int move = -1;
-                    //random move on open spot
-                    do {
-                        move = rand() % 9;
-                    } while (gamestate.board[move] != _EMTY_);
-                    gamestate.board[move] = _O_;
-                    gamestate.marked_spaces += 1;
-                    gamestate.turn = !gamestate.turn;
-                    //TODO: killer AI, never lose
+
+                if (!gamestate.gameover) {
+                    moveBalls(gamestate);
                 }
-            }
 
-            /*
-            0, 1, 2
-            3, 4, 5
-            6, 7, 8
-            */
-
-            //check for win condition
-            //if there is three in a row of a single mark
-            //that mark's player is the winner (currently has the turn)
-            //mark the winning triple
-            if (gamestate.board[0] != _EMTY_ && gamestate.board[0] == gamestate.board[1] && gamestate.board[0] == gamestate.board[2]) {
-                // top row 
-                gamestate.gameover = true;
-                gamestate.marks[0] = _HORZ_;
-                gamestate.marks[1] = _HORZ_;
-                gamestate.marks[2] = _HORZ_;
-            } else if (gamestate.board[3] != _EMTY_ && gamestate.board[3] == gamestate.board[4] && gamestate.board[3] == gamestate.board[5]) {
-                // middle row
-                gamestate.gameover = true;
-                gamestate.marks[3] = _HORZ_;
-                gamestate.marks[4] = _HORZ_;
-                gamestate.marks[5] = _HORZ_;            
-            } else if (gamestate.board[6] != _EMTY_ && gamestate.board[6] == gamestate.board[7] && gamestate.board[6] == gamestate.board[8]) {
-                // bottom row
-                gamestate.gameover = true;
-                gamestate.marks[6] = _HORZ_;
-                gamestate.marks[7] = _HORZ_;
-                gamestate.marks[8] = _HORZ_;            
-            } else if (gamestate.board[0] != _EMTY_ && gamestate.board[0] == gamestate.board[3] && gamestate.board[0] == gamestate.board[6]) {
-                // left column
-                gamestate.gameover = true;
-                gamestate.marks[0] = _VERT_;
-                gamestate.marks[3] = _VERT_;
-                gamestate.marks[6] = _VERT_;
-            } else if (gamestate.board[1] != _EMTY_ && gamestate.board[1] == gamestate.board[4] && gamestate.board[1] == gamestate.board[7]) {
-                // center column
-                gamestate.gameover = true;
-                gamestate.marks[1] = _VERT_;
-                gamestate.marks[4] = _VERT_;
-                gamestate.marks[7] = _VERT_;
-            } else if (gamestate.board[2] != _EMTY_ && gamestate.board[2] == gamestate.board[5] && gamestate.board[2] == gamestate.board[8]) {
-                // right column
-                gamestate.gameover = true;
-                gamestate.marks[2] = _VERT_;
-                gamestate.marks[5] = _VERT_;
-                gamestate.marks[8] = _VERT_;
-            } else if (gamestate.board[0] != _EMTY_ && gamestate.board[0] == gamestate.board[4] && gamestate.board[0] == gamestate.board[8]) {
-                // ul to lr diag
-                gamestate.gameover = true;
-                gamestate.marks[0] = _DIAR_;
-                gamestate.marks[4] = _DIAR_;
-                gamestate.marks[8] = _DIAR_;
-            } else if (gamestate.board[6] != _EMTY_ && gamestate.board[6] == gamestate.board[4] && gamestate.board[6] == gamestate.board[2]) {
-                // ll to ur diag
-                gamestate.gameover = true;
-                gamestate.marks[6] = _DIAG_;
-                gamestate.marks[4] = _DIAG_;
-                gamestate.marks[2] = _DIAG_;
-            } else if (gamestate.marked_spaces == 9) {
-                //else if all the spaces are full
-                //it's a tie
-                gamestate.tie = true;
-                gamestate.gameover = true;
-            }
-
-            if (gamestate.gameover) {
-                //flip the turn indicator back to the winner
-                gamestate.turn = !gamestate.turn;
+                //clear backbuffer
+                SDL_RenderClear(renderer);
+                //write to backbuffer
+                //remember furthest Z written first
+                //LazyFoo 8, could use geometry (rect, lines, points) in SDL renderer instead!
+                //LazyFoo 9, viewports! (minimaps)
+                //LazyFoo12, renderer color modulation (filter with color)
+                //LazyFoo13, renderer alpha blending
+                //write background, then arena, then bricks, then paddle and then ball
+                renderArena(renderer, tilemap, gamestate);
+                //write text        
+                // renderStatus(renderer, gamestate);
+                //swap buffers
+                SDL_RenderPresent(renderer);
+                SDL_Delay(1000/60); //wait for 60ms
             }
         }
-
-        // std::cout << "over: " << gamestate.gameover << " tie: " << gamestate.tie << " turn: " << gamestate.turn << std::endl;
-
-        //clear backbuffer
-        SDL_RenderClear(renderer);
-        //write to backbuffer
-        //remember furthest Z written first
-        //write board, symbols, then winning marks
-        renderBoard(renderer, tilemap, gamestate);
-        //write text        
-        renderStatus(renderer, gamestate);
-        //swap buffers
-        SDL_RenderPresent(renderer);
-        SDL_Delay(1000/60); //wait for 60ms
     }
-
-    SDL_DestroyTexture(tilemap);
-    SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(window);
-    SDL_Quit();
-    
+    close();
     return 0;
 }
