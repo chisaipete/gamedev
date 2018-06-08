@@ -54,6 +54,10 @@ include_directories(${SDL2_TTF_INCLUDE_DIR})
 # add_executable(tic_tac_toe ${SOURCE_FILES})
 # target_link_libraries(tic_tac_toe ${SDL2_LIBRARY} ${SDL2_IMAGE_LIBRARY} ${SDL2_TTF_LIBRARY})
 
-set(SOURCE_FILES rock_paper_scissors.cpp)
-add_executable(rock_paper_scissors ${SOURCE_FILES})
-target_link_libraries(rock_paper_scissors ${SDL2_LIBRARY} ${SDL2_IMAGE_LIBRARY} ${SDL2_TTF_LIBRARY})
+# set(SOURCE_FILES rock_paper_scissors.cpp)
+# add_executable(rock_paper_scissors ${SOURCE_FILES})
+# target_link_libraries(rock_paper_scissors ${SDL2_LIBRARY} ${SDL2_IMAGE_LIBRARY} ${SDL2_TTF_LIBRARY})
+
+set(SOURCE_FILES breakout.cpp)
+add_executable(breakout ${SOURCE_FILES})
+target_link_libraries(breakout ${SDL2_LIBRARY} ${SDL2_IMAGE_LIBRARY} ${SDL2_TTF_LIBRARY})
