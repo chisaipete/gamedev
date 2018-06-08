@@ -32,6 +32,13 @@ message(STATUS "Include directory: " ${SDL2_IMAGE_INCLUDE_DIR})
 message(STATUS "Libraries: " ${SDL2_IMAGE_LIBRARY})
 include_directories(${SDL2_IMAGE_INCLUDE_DIR})
 
+#SDL2_ttf
+set(SDL2_TTF "C:/SDL2_ttf-2.0.14")
+find_package(SDL2_ttf REQUIRED)
+message(STATUS "Include directory: " ${SDL2_TTF_INCLUDE_DIR})
+message(STATUS "Libraries: " ${SDL2_TTF_LIBRARY})
+include_directories(${SDL2_TTF_INCLUDE_DIR})
+
 # #libtcod
 # set(LIBTCOD "C:/libtcod-1.6.7")
 # find_package(LIBTCOD REQUIRED)
@@ -43,7 +50,10 @@ include_directories(${SDL2_IMAGE_INCLUDE_DIR})
 
 # add_executable(hangman hangman.cpp)
 
-set(SOURCE_FILES tic_tac_toe.cpp)
-add_executable(tic_tac_toe ${SOURCE_FILES})
-target_link_libraries(tic_tac_toe ${SDL2_LIBRARY} ${SDL2_IMAGE_LIBRARY})
+# set(SOURCE_FILES tic_tac_toe.cpp)
+# add_executable(tic_tac_toe ${SOURCE_FILES})
+# target_link_libraries(tic_tac_toe ${SDL2_LIBRARY} ${SDL2_IMAGE_LIBRARY} ${SDL2_TTF_LIBRARY})
 
+set(SOURCE_FILES rock_paper_scissors.cpp)
+add_executable(rock_paper_scissors ${SOURCE_FILES})
+target_link_libraries(rock_paper_scissors ${SDL2_LIBRARY} ${SDL2_IMAGE_LIBRARY} ${SDL2_TTF_LIBRARY})
