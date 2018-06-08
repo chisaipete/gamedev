@@ -12,6 +12,8 @@ unsigned long long rdtsc(){
     return ((unsigned long long)hi << 32) | lo;
 }
 
+//TODO: add a scaling factor for EVERYTHING if we decide to change the size of things
+
 const int TILE_SIZE = 32;
 const int SCREEN_TILE_WIDTH = 20;
 const int SCREEN_TILE_HEIGHT = 15;
@@ -20,7 +22,13 @@ const int SCREEN_HEIGHT = TILE_SIZE*SCREEN_TILE_HEIGHT; //480
 const int BRICK_WIDTH = SCREEN_TILE_WIDTH-2;
 const int BRICK_HEIGHT = SCREEN_TILE_HEIGHT;
 const int BRICK_TILE_HEIGHT = 12;
-const int MAX_BALL_VELOCITY = 10;
+const int MAX_BALL_VELOCITY = 1;
+const int BALL_WIDTH = 4;
+const int BALL_HEIGHT = 4;
+const int PADDLE_WIDTH = 28; //varies if wider
+const int PADDLE_HEIGHT = 7;
+
+//LazyFoo27: should probably be making objects for things to encapsulate code better
 
 //tilemap indexes
 #define EMPTY              (-1)
@@ -52,6 +60,7 @@ struct Ball {
     int ball_type;
     SDL_Point ball_pos;
     SDL_Point velocity;
+    SDL_Rect collider;
 };
 
 struct GameState {
@@ -61,6 +70,7 @@ struct GameState {
     int balls; //lives
     SDL_Point paddle_pos;
     int paddle_size;
+    SDL_Rect paddle_collider;
     Ball active_balls[3];
     int bricks[BRICK_WIDTH*BRICK_HEIGHT];
 };
@@ -297,10 +307,11 @@ void renderArena(SDL_Renderer *ren, SDL_Texture *tm, GameState &gamestate) {
         }
     }
 
+    //TODO: optimize away some of these constants into #defines
     //draw paddle
     switch (gamestate.paddle_size) {
         case 1:
-            renderTexture(tm, ren, gamestate.paddle_pos.x, gamestate.paddle_pos.y, &sprites[PADDLE]);
+            renderTexture(tm, ren, gamestate.paddle_pos.x-((TILE_SIZE/2)-(PADDLE_WIDTH/2)), gamestate.paddle_pos.y-((TILE_SIZE/2)-(PADDLE_HEIGHT/2)), &sprites[PADDLE]);
             break;
         default:
             break;
@@ -310,10 +321,10 @@ void renderArena(SDL_Renderer *ren, SDL_Texture *tm, GameState &gamestate) {
     for (int i = 0; i < 3; i++) {  //up to 3 balls
         switch (gamestate.active_balls[i].ball_type) {
             case FIRE_BALL:
-                renderTexture(tm, ren, gamestate.active_balls[i].ball_pos.x, gamestate.active_balls[i].ball_pos.y, &sprites[FIRE_BALL]);
+                renderTexture(tm, ren, gamestate.active_balls[i].ball_pos.x-((TILE_SIZE/2)-(BALL_WIDTH/2)), gamestate.active_balls[i].ball_pos.y-((TILE_SIZE/2)-(BALL_HEIGHT/2)), &sprites[FIRE_BALL]);
                 break;
             case BALL:
-                renderTexture(tm, ren, gamestate.active_balls[i].ball_pos.x, gamestate.active_balls[i].ball_pos.y, &sprites[BALL]);
+                renderTexture(tm, ren, gamestate.active_balls[i].ball_pos.x-((TILE_SIZE/2)-(BALL_WIDTH/2)), gamestate.active_balls[i].ball_pos.y-((TILE_SIZE/2)-(BALL_HEIGHT/2)), &sprites[BALL]);
                 break;
             default:
                 //EMPTY
@@ -393,13 +404,71 @@ void loadLevel(GameState &gamestate, int LevelNum = 0) {
     }
 }
 
+bool checkBoxCollision(SDL_Rect a, SDL_Rect b) {
+    // assume collision [separating axis text]
+    int leftA, leftB, rightA, rightB, topA, topB, bottomA, bottomB;
+    //sides of a
+    leftA = a.x;
+    rightA = a.x + a.w;
+    topA = a.y;
+    bottomA = a.y + a.h;
+    //sides of b
+    leftB = b.x;
+    rightB = b.x + b.w;
+    topB = b.y;
+    bottomB = b.y + b.h;
+    //check for collisions!
+    if (bottomA <= topB) return false;
+    if (topA >= bottomB) return false;
+    if (rightA <= leftB) return false;
+    if (leftA >= rightB) return false;
+    //none of the sides from a are outside b
+    return true;
+}
+
+bool checkPixCollision() {
+
+}
+
 void moveBalls(GameState &gamestate) {
     for (int i = 0; i < 3; i++) {  //up to 3 balls
         switch (gamestate.active_balls[i].ball_type) {
             case FIRE_BALL:
             case BALL:
                 gamestate.active_balls[i].ball_pos.x += gamestate.active_balls[i].velocity.x;
+                gamestate.active_balls[i].collider.x = gamestate.active_balls[i].ball_pos.x;
+                //check for collision on every wall, brick and paddle
+                //wall check
+                //brick check
+                //paddle check
+                switch (gamestate.paddle_size) {
+                    case 1:
+                        if (checkBoxCollision(gamestate.active_balls[i].collider, gamestate.paddle_collider)) {
+                            gamestate.active_balls[i].ball_pos.x -= gamestate.active_balls[i].velocity.x;
+                            gamestate.active_balls[i].collider.x = gamestate.active_balls[i].ball_pos.x;
+                        }
+                        break;
+                    default:
+                        break;
+                }
+                //ball check **BONUS**
                 gamestate.active_balls[i].ball_pos.y += gamestate.active_balls[i].velocity.y;
+                gamestate.active_balls[i].collider.y = gamestate.active_balls[i].ball_pos.y;
+                //check for collision on every wall, brick and paddle
+                //wall check
+                //brick check
+                //paddle check
+                switch (gamestate.paddle_size) {
+                    case 1:
+                        if (checkBoxCollision(gamestate.active_balls[i].collider, gamestate.paddle_collider)) {
+                            gamestate.active_balls[i].ball_pos.y -= gamestate.active_balls[i].velocity.y;
+                            gamestate.active_balls[i].collider.y = gamestate.active_balls[i].ball_pos.y;
+                        }
+                        break;
+                    default:
+                        break;
+                }
+                //ball check **BONUS**
                 break;
             default:
                 break;
@@ -419,19 +488,25 @@ int main(int argc, char **argv) {
             gamestate.gameover = false;
             gamestate.paused = false;
             gamestate.score = 0;
-            gamestate.balls = 3;
-            gamestate.paddle_pos = {SCREEN_WIDTH/2 - TILE_SIZE/2, SCREEN_HEIGHT-TILE_SIZE - TILE_SIZE/2};
-            gamestate.paddle_size = 1;
+            gamestate.balls = 3;   //TODO: check that this collider is aligned on the paddle (perhaps render collider guides)
+            gamestate.paddle_pos = {(SCREEN_WIDTH/2)-(PADDLE_WIDTH/2), SCREEN_HEIGHT-(TILE_SIZE-(TILE_SIZE/2))-(PADDLE_HEIGHT/2)};
+            gamestate.paddle_size = 1;  //TODO: fix rendering offset as well
+            gamestate.paddle_collider = {gamestate.paddle_pos.x,gamestate.paddle_pos.y,PADDLE_WIDTH,PADDLE_HEIGHT};
             gamestate.active_balls[0].ball_type = BALL;
-            gamestate.active_balls[0].ball_pos = {SCREEN_WIDTH/2 - TILE_SIZE/2, SCREEN_HEIGHT-TILE_SIZE-BRICK_TILE_HEIGHT - TILE_SIZE/2};
+            gamestate.active_balls[0].ball_pos = {(SCREEN_WIDTH/2)-(BALL_WIDTH/2), SCREEN_HEIGHT-(TILE_SIZE+BRICK_TILE_HEIGHT)-(BALL_HEIGHT/2)};
             gamestate.active_balls[0].velocity = {0,0};
+            gamestate.active_balls[0].collider = {gamestate.active_balls[0].ball_pos.x,gamestate.active_balls[0].ball_pos.y,BALL_WIDTH,BALL_HEIGHT};
             gamestate.active_balls[1].ball_type = EMPTY;
             gamestate.active_balls[1].ball_pos = {0,0};
             gamestate.active_balls[1].velocity = {0,0};
+            gamestate.active_balls[1].collider = {gamestate.active_balls[1].ball_pos.x,gamestate.active_balls[1].ball_pos.y,BALL_WIDTH,BALL_HEIGHT};
             gamestate.active_balls[2].ball_type = EMPTY;
             gamestate.active_balls[2].ball_pos = {0,0};
             gamestate.active_balls[2].velocity = {0,0};
+            gamestate.active_balls[2].collider = {gamestate.active_balls[2].ball_pos.x,gamestate.active_balls[2].ball_pos.y,BALL_WIDTH,BALL_HEIGHT};
             loadLevel(gamestate, 1);
+
+            //initialize wall colliders!
 
             while (!quit) {
                 SDL_Event event;
@@ -479,6 +554,17 @@ int main(int argc, char **argv) {
                 renderArena(renderer, tilemap, gamestate);
                 //write text        
                 // renderStatus(renderer, gamestate);
+
+                //GUIDELINES
+                //white
+                SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, 0xFF); 
+                SDL_RenderDrawLine(renderer, SCREEN_WIDTH/2, SCREEN_HEIGHT, SCREEN_WIDTH/2, 0);
+                SDL_RenderDrawLine(renderer, 0, SCREEN_HEIGHT-(TILE_SIZE-(TILE_SIZE/2)), SCREEN_WIDTH, SCREEN_HEIGHT-(TILE_SIZE-(TILE_SIZE/2)));
+                SDL_RenderDrawLine(renderer, 0, SCREEN_HEIGHT-(TILE_SIZE+BRICK_TILE_HEIGHT), SCREEN_WIDTH, SCREEN_HEIGHT-(TILE_SIZE+BRICK_TILE_HEIGHT));
+                //back to black
+                SDL_SetRenderDrawColor(renderer, 0x0, 0x0, 0x0, 0xFF);
+                //END GUIDELINES
+
                 //swap buffers
                 SDL_RenderPresent(renderer);
                 SDL_Delay(1000/60); //wait for 60ms
