@@ -58,6 +58,6 @@ include_directories(${SDL2_TTF_INCLUDE_DIR})
 # add_executable(rock_paper_scissors ${SOURCE_FILES})
 # target_link_libraries(rock_paper_scissors ${SDL2_LIBRARY} ${SDL2_IMAGE_LIBRARY} ${SDL2_TTF_LIBRARY})
 
-set(SOURCE_FILES breakout.cpp)
+set(SOURCE_FILES breakout.cpp breakout.h)
 add_executable(breakout ${SOURCE_FILES})
 target_link_libraries(breakout ${SDL2_LIBRARY} ${SDL2_IMAGE_LIBRARY} ${SDL2_TTF_LIBRARY})

@@ -1,16 +1,4 @@
-#include <iostream>
-#include <cstdlib>
-#include <ctime>
-#include <SDL.h>
-#include <SDL_timer.h>
-#include <SDL_image.h>
-#include <SDL_ttf.h>
-
-unsigned long long rdtsc(){
-    unsigned int lo,hi;
-    __asm__ __volatile__ ("rdtsc" : "=a" (lo), "=d" (hi));
-    return ((unsigned long long)hi << 32) | lo;
-}
+#include "breakout.h"
 
 //TODO: add a scaling factor for EVERYTHING if we decide to change the size of things
 //TODO: makes sure the ball isn't so fast that it hops over collision boxes!
@@ -23,11 +11,11 @@ const int SCREEN_HEIGHT = TILE_SIZE*SCREEN_TILE_HEIGHT; //480
 const int BRICK_WIDTH = SCREEN_TILE_WIDTH-2;
 const int BRICK_HEIGHT = SCREEN_TILE_HEIGHT;
 const int BRICK_TILE_HEIGHT = 12;
-const int MIN_BALL_VELOCITY = 1;
-const int BALL_VELOCITY = 5;
-const int MAX_BALL_VELOCITY = 10;
+const int MIN_BALL_SPEED = 1;
+const float BALL_SPEED = 320.0; //pixels / second
+const int MAX_BALL_SPEED = 10;
 const int MIN_PADDLE_VELOCITY = 1;
-const int PADDLE_VELOCITY = 5;
+const int PADDLE_VELOCITY = 320; //pixels / second
 const int MAX_PADDLE_VELOCITY = 10;
 const int BALL_WIDTH = 4;
 const int BALL_HEIGHT = 4;
@@ -60,18 +48,10 @@ const int WALL_THICKNESS = 6;
 #define LR_CORNER_WALL     (18)
 #define EMPTY              (19)
 
-SDL_Rect sprites[15];
-
-SDL_Color WHITE = { 255, 255, 255, 255 };
-
-SDL_Window* window = NULL;
-SDL_Renderer* renderer = NULL;
-SDL_Texture* tilemap = NULL;
-
 struct Ball {
     int ball_type;
-    SDL_Point ball_pos;
-    SDL_Point velocity;
+    vector2 position;
+    vector2 direction;
     SDL_Rect collider;
 };
 
@@ -99,6 +79,13 @@ struct GameState {
     Wall walls[SCREEN_TILE_WIDTH*SCREEN_TILE_HEIGHT];
 };
 
+SDL_Color WHITE = { 255, 255, 255, 255 };
+
+SDL_Rect sprites[15];
+
+SDL_Window* window = NULL;
+SDL_Renderer* renderer = NULL;
+SDL_Texture* tilemap = NULL;
 GameState gamestate;
 
 void logSDLError(std::ostream &os, const std::string &msg) {
@@ -352,10 +339,10 @@ void renderArena(SDL_Renderer *ren, SDL_Texture *tm, GameState &gamestate) {
     for (int i = 0; i < 3; i++) {  //up to 3 balls
         switch (gamestate.active_balls[i].ball_type) {
             case FIRE_BALL:
-                renderTexture(tm, ren, gamestate.active_balls[i].ball_pos.x-((TILE_SIZE/2)-(BALL_WIDTH/2)), gamestate.active_balls[i].ball_pos.y-((TILE_SIZE/2)-(BALL_HEIGHT/2)), &sprites[FIRE_BALL]);
+                renderTexture(tm, ren, static_cast<int>(gamestate.active_balls[i].position.x)-((TILE_SIZE/2)-(BALL_WIDTH/2)), static_cast<int>(gamestate.active_balls[i].position.y)-((TILE_SIZE/2)-(BALL_HEIGHT/2)), &sprites[FIRE_BALL]);
                 break;
             case BALL:
-                renderTexture(tm, ren, gamestate.active_balls[i].ball_pos.x-((TILE_SIZE/2)-(BALL_WIDTH/2)), gamestate.active_balls[i].ball_pos.y-((TILE_SIZE/2)-(BALL_HEIGHT/2)), &sprites[BALL]);
+                renderTexture(tm, ren, static_cast<int>(gamestate.active_balls[i].position.x)-((TILE_SIZE/2)-(BALL_WIDTH/2)), static_cast<int>(gamestate.active_balls[i].position.y)-((TILE_SIZE/2)-(BALL_HEIGHT/2)), &sprites[BALL]);
                 break;
             default:
                 //EMPTY
@@ -364,38 +351,59 @@ void renderArena(SDL_Renderer *ren, SDL_Texture *tm, GameState &gamestate) {
     }
 }
 
-// void renderStatus(SDL_Renderer *ren, GameState &gamestate) {
-//     if (!gamestate.gameover) {
-//         if (gamestate.turn) {
-//             SDL_Texture* image = loadText_to_Texture("It's my turn!", ren);
-//             int iW, iH;
-//             SDL_QueryTexture(image, NULL, NULL, &iW, &iH);
-//             renderTexture(image, ren, SCREEN_WIDTH/2 - iW/2, SCREEN_HEIGHT-TILE_SIZE/2);
-//         } else {
-//             SDL_Texture* image = loadText_to_Texture("It's the human's turn.", ren);
-//             int iW, iH;
-//             SDL_QueryTexture(image, NULL, NULL, &iW, &iH);
-//             renderTexture(image, ren, SCREEN_WIDTH/2 - iW/2, SCREEN_HEIGHT-TILE_SIZE/2);
-//         }
-//     } else {
-//         if (gamestate.tie) {
-//             SDL_Texture* image = loadText_to_Texture("A tie.", ren);
-//             int iW, iH;
-//             SDL_QueryTexture(image, NULL, NULL, &iW, &iH);
-//             renderTexture(image, ren, SCREEN_WIDTH/2 - iW/2, SCREEN_HEIGHT-TILE_SIZE/2);
-//         } else if (gamestate.turn) {            
-//             SDL_Texture* image = loadText_to_Texture("I won!", ren);
-//             int iW, iH;
-//             SDL_QueryTexture(image, NULL, NULL, &iW, &iH);
-//             renderTexture(image, ren, SCREEN_WIDTH/2 - iW/2, SCREEN_HEIGHT-TILE_SIZE/2);
-//         } else {
-//             SDL_Texture* image = loadText_to_Texture("The human won.", ren);
-//             int iW, iH;
-//             SDL_QueryTexture(image, NULL, NULL, &iW, &iH);
-//             renderTexture(image, ren, SCREEN_WIDTH/2 - iW/2, SCREEN_HEIGHT-TILE_SIZE/2);
-//         }
-//     }
-// }
+/*
+void renderStatus(SDL_Renderer *ren, GameState &gamestate) {
+    if (!gamestate.gameover) {
+        if (gamestate.turn) {
+            SDL_Texture* image = loadText_to_Texture("It's my turn!", ren);
+            int iW, iH;
+            SDL_QueryTexture(image, NULL, NULL, &iW, &iH);
+            renderTexture(image, ren, SCREEN_WIDTH/2 - iW/2, SCREEN_HEIGHT-TILE_SIZE/2);
+        } else {
+            SDL_Texture* image = loadText_to_Texture("It's the human's turn.", ren);
+            int iW, iH;
+            SDL_QueryTexture(image, NULL, NULL, &iW, &iH);
+            renderTexture(image, ren, SCREEN_WIDTH/2 - iW/2, SCREEN_HEIGHT-TILE_SIZE/2);
+        }
+    } else {
+        if (gamestate.tie) {
+            SDL_Texture* image = loadText_to_Texture("A tie.", ren);
+            int iW, iH;
+            SDL_QueryTexture(image, NULL, NULL, &iW, &iH);
+            renderTexture(image, ren, SCREEN_WIDTH/2 - iW/2, SCREEN_HEIGHT-TILE_SIZE/2);
+        } else if (gamestate.turn) {            
+            SDL_Texture* image = loadText_to_Texture("I won!", ren);
+            int iW, iH;
+            SDL_QueryTexture(image, NULL, NULL, &iW, &iH);
+            renderTexture(image, ren, SCREEN_WIDTH/2 - iW/2, SCREEN_HEIGHT-TILE_SIZE/2);
+        } else {
+            SDL_Texture* image = loadText_to_Texture("The human won.", ren);
+            int iW, iH;
+            SDL_QueryTexture(image, NULL, NULL, &iW, &iH);
+            renderTexture(image, ren, SCREEN_WIDTH/2 - iW/2, SCREEN_HEIGHT-TILE_SIZE/2);
+        }
+    }
+}
+*/
+
+void resetBallsPaddles(GameState &gamestate) {
+    gamestate.paddle_pos = {(SCREEN_WIDTH/2)-(PADDLE_WIDTH/2), SCREEN_HEIGHT-(TILE_SIZE-(TILE_SIZE/2))-(PADDLE_HEIGHT/2)};
+    gamestate.paddle_size = 1;
+    gamestate.paddle_collider = {gamestate.paddle_pos.x,gamestate.paddle_pos.y,PADDLE_WIDTH,PADDLE_HEIGHT};
+    gamestate.paddle_velocity = {0,0};
+    gamestate.active_balls[0].ball_type = BALL;
+    gamestate.active_balls[0].position = {static_cast<float>((SCREEN_WIDTH/2)-(BALL_WIDTH/2)), static_cast<float>(SCREEN_HEIGHT-(TILE_SIZE+BRICK_TILE_HEIGHT)-(BALL_HEIGHT/2))};
+    gamestate.active_balls[0].direction = {0.0,0.0};
+    gamestate.active_balls[0].collider = {static_cast<int>(gamestate.active_balls[0].position.x),static_cast<int>(gamestate.active_balls[0].position.y),BALL_WIDTH,BALL_HEIGHT};
+    gamestate.active_balls[1].ball_type = EMPTY;
+    gamestate.active_balls[1].position = {0.0,0.0};
+    gamestate.active_balls[1].direction = {0.0,0.0};
+    gamestate.active_balls[1].collider = {static_cast<int>(gamestate.active_balls[1].position.x),static_cast<int>(gamestate.active_balls[1].position.y),BALL_WIDTH,BALL_HEIGHT};
+    gamestate.active_balls[2].ball_type = EMPTY;
+    gamestate.active_balls[2].position = {0.0,0.0};
+    gamestate.active_balls[2].direction = {0.0,0.0};
+    gamestate.active_balls[2].collider = {static_cast<int>(gamestate.active_balls[2].position.x),static_cast<int>(gamestate.active_balls[2].position.y),BALL_WIDTH,BALL_HEIGHT};
+}
 
 void loadLevel(GameState &gamestate, int LevelNum = 0) {
     //arena walls 
@@ -405,24 +413,24 @@ void loadLevel(GameState &gamestate, int LevelNum = 0) {
             if (x == 0) {
                 if (y > 0 ) {
                     gamestate.walls[SCREEN_TILE_WIDTH*y+x].wall_type = LEFT_WALL;
-                    //TODO: collider
+                    gamestate.walls[SCREEN_TILE_WIDTH*y+x].collider = {x*TILE_SIZE, y*TILE_SIZE, WALL_THICKNESS, TILE_SIZE};
                 } else {
                     gamestate.walls[SCREEN_TILE_WIDTH*y+x].wall_type = UL_CORNER_WALL;
-                    //TODO: collider
+                    gamestate.walls[SCREEN_TILE_WIDTH*y+x].collider = {0,0,0,0};
                 }
             } else if (x == SCREEN_TILE_WIDTH-1) {
                 if (y > 0 ) {
                     gamestate.walls[SCREEN_TILE_WIDTH*y+x].wall_type = RIGHT_WALL;
-                    //TODO: collider
+                    gamestate.walls[SCREEN_TILE_WIDTH*y+x].collider = {((x+1)*TILE_SIZE)-WALL_THICKNESS,y*TILE_SIZE, WALL_THICKNESS, TILE_SIZE};
                 } else if (y == 0){
                     gamestate.walls[SCREEN_TILE_WIDTH*y+x].wall_type = UR_CORNER_WALL;
-                    //TODO: collider
+                    gamestate.walls[SCREEN_TILE_WIDTH*y+x].collider = {0,0,0,0};
                 }
             }
             if (y == 0) {
                 if (x > 0 && x < SCREEN_TILE_WIDTH-1) {
                     gamestate.walls[SCREEN_TILE_WIDTH*y+x].wall_type = TOP_WALL;
-                    //TODO: collider
+                    gamestate.walls[SCREEN_TILE_WIDTH*y+x].collider = {x*TILE_SIZE, y*TILE_SIZE, TILE_SIZE, WALL_THICKNESS};
                 }
             }
         }
@@ -491,23 +499,62 @@ bool checkPixCollision() {
 
 }
 
-void moveBalls(GameState &gamestate) {
+void moveBalls(GameState &gamestate, float delta) {
+    vector2 prev_pos;
+    vector2 unit_vector = v2(0.0,-1.0); // 0*
+    // vector2 unit_vector = v2(0.5,-0.866025); //30*
+    // vector2 unit_vector = v2(0.707106,-0.707106); //45*
+    // vector2 unit_vector = v2(0.0,-1.0); //90*
+    // sin(A) = x/1 cos(A) = y/1
+
+    // vector2 ball_dir_lineA, ball_dir_lineB;
+
+
     for (int i = 0; i < 3; i++) {  //up to 3 balls
         switch (gamestate.active_balls[i].ball_type) {
             case FIRE_BALL:
             case BALL:
-                gamestate.active_balls[i].ball_pos.x += gamestate.active_balls[i].velocity.x;
-                gamestate.active_balls[i].collider.x = gamestate.active_balls[i].ball_pos.x;
+
+                prev_pos = gamestate.active_balls[i].position;
+                
+                gamestate.active_balls[i].position = gamestate.active_balls[i].position + gamestate.active_balls[i].direction * BALL_SPEED * delta;
+                gamestate.active_balls[i].collider.x = static_cast<int>(gamestate.active_balls[i].position.x);
+                gamestate.active_balls[i].collider.y = static_cast<int>(gamestate.active_balls[i].position.y);
+
                 //check for collision on every wall, brick and paddle
                 //wall check
+                for (int y = 0; y < SCREEN_TILE_HEIGHT; y++) {
+                    for(int x = 0; x < SCREEN_TILE_WIDTH; x++) {
+                        switch (gamestate.walls[SCREEN_TILE_WIDTH*y+x].wall_type) {
+                            case UL_CORNER_WALL:
+                            case UR_CORNER_WALL:
+                            case LL_CORNER_WALL:
+                            case LR_CORNER_WALL:
+                            case LEFT_WALL:
+                            case TOP_WALL:
+                            case BOTTOM_WALL:
+                            case RIGHT_WALL:
+                                if (checkBoxCollision(gamestate.active_balls[i].collider, gamestate.walls[SCREEN_TILE_WIDTH*y+x].collider)) {
+                                    gamestate.active_balls[i].position = prev_pos;
+                                    gamestate.active_balls[i].collider.x = static_cast<int>(gamestate.active_balls[i].position.x);
+                                    gamestate.active_balls[i].collider.y = static_cast<int>(gamestate.active_balls[i].position.y);
+                                    gamestate.active_balls[i].direction = normalize(reflect(gamestate.active_balls[i].direction * BALL_SPEED, unit_vector), BALL_SPEED);
+                                }
+                            case EMPTY:
+                            default:
+                                break;
+                        }
+                    }
+                }
                 //brick check
                 for (int y = 0; y < BRICK_HEIGHT; y++) {
                     for (int x = 0; x < BRICK_WIDTH; x++) {
                         if (gamestate.bricks[BRICK_WIDTH*y+x].brick_type != EMPTY) {
                             if (checkBoxCollision(gamestate.active_balls[i].collider, gamestate.bricks[BRICK_WIDTH*y+x].collider)) {
-                                gamestate.active_balls[i].ball_pos.x -= gamestate.active_balls[i].velocity.x;
-                                gamestate.active_balls[i].collider.x = gamestate.active_balls[i].ball_pos.x;
-                                gamestate.active_balls[i].velocity.x = -gamestate.active_balls[i].velocity.x;
+                                gamestate.active_balls[i].position = prev_pos;
+                                gamestate.active_balls[i].collider.x = static_cast<int>(gamestate.active_balls[i].position.x);
+                                gamestate.active_balls[i].collider.y = static_cast<int>(gamestate.active_balls[i].position.y);
+                                gamestate.active_balls[i].direction = normalize(reflect(gamestate.active_balls[i].direction * BALL_SPEED, unit_vector), BALL_SPEED);
                                 //break the brick!
                                 gamestate.bricks[BRICK_WIDTH*y+x].brick_type = EMPTY;
                             }
@@ -518,46 +565,27 @@ void moveBalls(GameState &gamestate) {
                 switch (gamestate.paddle_size) {
                     case 1:
                         if (checkBoxCollision(gamestate.active_balls[i].collider, gamestate.paddle_collider)) {
-                            gamestate.active_balls[i].ball_pos.x -= gamestate.active_balls[i].velocity.x;
-                            gamestate.active_balls[i].collider.x = gamestate.active_balls[i].ball_pos.x;
-                            gamestate.active_balls[i].velocity.x = -gamestate.active_balls[i].velocity.x;
+                            gamestate.active_balls[i].position = prev_pos;
+                            gamestate.active_balls[i].collider.x = static_cast<int>(gamestate.active_balls[i].position.x);
+                            gamestate.active_balls[i].collider.y = static_cast<int>(gamestate.active_balls[i].position.y);
+                            //depending on where the ball hit on the paddle, change the angle of deflection (by modifying the normal vector of the paddle)
+
+                            // check for location of 
+                            gamestate.active_balls[i].direction = normalize(reflect(gamestate.active_balls[i].direction * BALL_SPEED, unit_vector), BALL_SPEED);
                         }
                         break;
                     default:
                         break;
                 }
                 //ball check **BONUS**
-                gamestate.active_balls[i].ball_pos.y += gamestate.active_balls[i].velocity.y;
-                gamestate.active_balls[i].collider.y = gamestate.active_balls[i].ball_pos.y;
-                //check for collision on every wall, brick and paddle
-                //wall check
-                //brick check
-                for (int y = 0; y < BRICK_HEIGHT; y++) {
-                    for (int x = 0; x < BRICK_WIDTH; x++) {
-                        if (gamestate.bricks[BRICK_WIDTH*y+x].brick_type != EMPTY) {
-                            if (checkBoxCollision(gamestate.active_balls[i].collider, gamestate.bricks[BRICK_WIDTH*y+x].collider)) {
-                                gamestate.active_balls[i].ball_pos.y -= gamestate.active_balls[i].velocity.y;
-                                gamestate.active_balls[i].collider.y = gamestate.active_balls[i].ball_pos.y;
-                                gamestate.active_balls[i].velocity.y = -gamestate.active_balls[i].velocity.y;
-                                //break the brick!
-                                gamestate.bricks[BRICK_WIDTH*y+x].brick_type = EMPTY;
-                            }
-                        }
-                    }
+                
+                //bounds check
+                if ( gamestate.active_balls[i].position.y > SCREEN_HEIGHT || gamestate.active_balls[i].position.y < 0 || gamestate.active_balls[i].position.x < 0 || gamestate.active_balls[i].position.x > SCREEN_WIDTH) {
+                    // went off the level, lose a life and restart
+                    gamestate.balls -= 1;
+                    resetBallsPaddles(gamestate);
                 }
-                //paddle check
-                switch (gamestate.paddle_size) {
-                    case 1:
-                        if (checkBoxCollision(gamestate.active_balls[i].collider, gamestate.paddle_collider)) {
-                            gamestate.active_balls[i].ball_pos.y -= gamestate.active_balls[i].velocity.y;
-                            gamestate.active_balls[i].collider.y = gamestate.active_balls[i].ball_pos.y;
-                            gamestate.active_balls[i].velocity.y = -gamestate.active_balls[i].velocity.y;
-                        }
-                        break;
-                    default:
-                        break;
-                }
-                //ball check **BONUS**
+
                 break;
             default:
                 break;
@@ -565,15 +593,15 @@ void moveBalls(GameState &gamestate) {
     }
 }
 
-void movePaddle(GameState &gamestate) {
-    gamestate.paddle_pos.x += gamestate.paddle_velocity.x;
-    gamestate.paddle_pos.y += gamestate.paddle_velocity.y;
-    gamestate.paddle_collider.x = gamestate.paddle_pos.x;
-    gamestate.paddle_collider.y = gamestate.paddle_pos.y;
+void movePaddle(GameState &gamestate, float delta) {
+    gamestate.paddle_pos.x += gamestate.paddle_velocity.x * delta;
     //check wall collisions
+    gamestate.paddle_collider.x = gamestate.paddle_pos.x;
+
+    gamestate.paddle_pos.y += gamestate.paddle_velocity.y * delta;
+    //check wall collisions
+    gamestate.paddle_collider.y = gamestate.paddle_pos.y;
 }
-
-
 
 int main(int argc, char **argv) {
     if (!init()) {
@@ -585,27 +613,15 @@ int main(int argc, char **argv) {
             int quit = 0;
             int collision_debug = 0;
             int guideline_debug = 0;
+            int reflection_debug = 0;
+            int delta_ticks = 0;
+            int frame_ticks = 0;
             //setup gamestate and first level loadout (maybe spit into two structs??)
             gamestate.gameover = false;
             gamestate.paused = false;
             gamestate.score = 0;
             gamestate.balls = 3;
-            gamestate.paddle_pos = {(SCREEN_WIDTH/2)-(PADDLE_WIDTH/2), SCREEN_HEIGHT-(TILE_SIZE-(TILE_SIZE/2))-(PADDLE_HEIGHT/2)};
-            gamestate.paddle_size = 1;
-            gamestate.paddle_collider = {gamestate.paddle_pos.x,gamestate.paddle_pos.y,PADDLE_WIDTH,PADDLE_HEIGHT};
-            gamestate.paddle_velocity = {0,0};
-            gamestate.active_balls[0].ball_type = BALL;
-            gamestate.active_balls[0].ball_pos = {(SCREEN_WIDTH/2)-(BALL_WIDTH/2), SCREEN_HEIGHT-(TILE_SIZE+BRICK_TILE_HEIGHT)-(BALL_HEIGHT/2)};
-            gamestate.active_balls[0].velocity = {0,0};
-            gamestate.active_balls[0].collider = {gamestate.active_balls[0].ball_pos.x,gamestate.active_balls[0].ball_pos.y,BALL_WIDTH,BALL_HEIGHT};
-            gamestate.active_balls[1].ball_type = EMPTY;
-            gamestate.active_balls[1].ball_pos = {0,0};
-            gamestate.active_balls[1].velocity = {0,0};
-            gamestate.active_balls[1].collider = {gamestate.active_balls[1].ball_pos.x,gamestate.active_balls[1].ball_pos.y,BALL_WIDTH,BALL_HEIGHT};
-            gamestate.active_balls[2].ball_type = EMPTY;
-            gamestate.active_balls[2].ball_pos = {0,0};
-            gamestate.active_balls[2].velocity = {0,0};
-            gamestate.active_balls[2].collider = {gamestate.active_balls[2].ball_pos.x,gamestate.active_balls[2].ball_pos.y,BALL_WIDTH,BALL_HEIGHT};
+            resetBallsPaddles(gamestate);
             loadLevel(gamestate, 1);
 
             while (!quit) {
@@ -622,36 +638,65 @@ int main(int argc, char **argv) {
                     }
                     if (event.type == SDL_KEYDOWN && event.key.repeat == 0) {
                         switch(event.key.keysym.sym) { //wonky ball manual movement code for testing collisions
-                            case SDLK_1:     guideline_debug = !guideline_debug; break;
-                            case SDLK_2:     collision_debug = !collision_debug; break;
-                            case SDLK_w:     gamestate.active_balls[0].velocity = {0,0}; gamestate.active_balls[0].velocity.y -= BALL_VELOCITY; break;
-                            case SDLK_s:     gamestate.active_balls[0].velocity = {0,0}; gamestate.active_balls[0].velocity.y += BALL_VELOCITY; break;
-                            case SDLK_a:     gamestate.active_balls[0].velocity = {0,0}; gamestate.active_balls[0].velocity.x -= BALL_VELOCITY; break;
-                            case SDLK_d:     gamestate.active_balls[0].velocity = {0,0}; gamestate.active_balls[0].velocity.x += BALL_VELOCITY; break;
-
-                            case SDLK_LEFT:  gamestate.paddle_velocity.x -= PADDLE_VELOCITY; break;
-                            case SDLK_RIGHT: gamestate.paddle_velocity.x += PADDLE_VELOCITY; break;
+                            case SDLK_1:     
+                                guideline_debug = !guideline_debug; 
+                                break;
+                            case SDLK_2:     
+                                collision_debug = !collision_debug; 
+                                break;
+                            case SDLK_3:     
+                                reflection_debug = !reflection_debug; 
+                                break;
+                            case SDLK_w:     
+                                gamestate.active_balls[0].direction = { 0.0, -1.0}; 
+                                break;
+                            case SDLK_s:     
+                                gamestate.active_balls[0].direction = { 0.0,  1.0}; 
+                                break;
+                            case SDLK_a:     
+                                gamestate.active_balls[0].direction = {-1.0,  0.0}; 
+                                break;
+                            case SDLK_d:     
+                                gamestate.active_balls[0].direction = { 1.0,  0.0}; 
+                                break;
+                            case SDLK_LEFT:  
+                                gamestate.paddle_velocity.x -= PADDLE_VELOCITY; 
+                                break;
+                            case SDLK_RIGHT: 
+                                gamestate.paddle_velocity.x += PADDLE_VELOCITY; 
+                                break;
                             case SDLK_KP_ENTER:
                             case SDLK_RETURN:
-                                             gamestate.active_balls[0].velocity.y += BALL_VELOCITY; break;
+                                gamestate.active_balls[0].direction = { 0.0, 1.0};
+                                break; // start moving down
                         }
                     } else if(event.type == SDL_KEYUP && event.key.repeat == 0) {
                         //Adjust the velocity
                         switch(event.key.keysym.sym) {
-                            case SDLK_w:     gamestate.active_balls[0].velocity.y += BALL_VELOCITY; break;
-                            case SDLK_s:     gamestate.active_balls[0].velocity.y -= BALL_VELOCITY; break;
-                            case SDLK_a:     gamestate.active_balls[0].velocity.x += BALL_VELOCITY; break;
-                            case SDLK_d:     gamestate.active_balls[0].velocity.x -= BALL_VELOCITY; break;
-
-                            case SDLK_LEFT:  gamestate.paddle_velocity.x += PADDLE_VELOCITY; break;
-                            case SDLK_RIGHT: gamestate.paddle_velocity.x -= PADDLE_VELOCITY; break;
+                            case SDLK_w:
+                            case SDLK_s:
+                            case SDLK_a:
+                            case SDLK_d:
+                                gamestate.active_balls[0].direction = { 0.0,  0.0};
+                                break;
+                            case SDLK_LEFT:
+                                gamestate.paddle_velocity.x += PADDLE_VELOCITY;
+                                break;
+                            case SDLK_RIGHT:
+                                gamestate.paddle_velocity.x -= PADDLE_VELOCITY;
+                                break;
                         }
                     }
                 }
 
                 if (!gamestate.gameover) {
-                    moveBalls(gamestate);
-                    movePaddle(gamestate);
+                    delta_ticks = SDL_GetTicks() - frame_ticks;
+                    float delta = delta_ticks / 1000.0;
+
+                    moveBalls(gamestate, delta);
+                    movePaddle(gamestate, delta);
+
+                    frame_ticks = SDL_GetTicks();
                 }
 
                 //clear backbuffer
@@ -666,6 +711,33 @@ int main(int argc, char **argv) {
                 renderArena(renderer, tilemap, gamestate);
                 //write text        
                 // renderStatus(renderer, gamestate);
+
+                if (reflection_debug) {
+                    vector2 d_start;
+                    vector2 d_end;
+                    //draw ball direction vector, for clarity
+                    SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0x0, 0xFF); //yellow
+                    for (int i = 0; i < 3; i++) {  //up to 3 balls
+                        switch (gamestate.active_balls[i].ball_type) {
+                            case FIRE_BALL:
+                            case BALL:
+                                d_start = gamestate.active_balls[i].position;
+                                d_end   = gamestate.active_balls[i].position + ((gamestate.active_balls[i].direction)*30);
+                                SDL_RenderDrawLine(renderer, static_cast<int>(d_start.x), static_cast<int>(d_start.y), static_cast<int>(d_end.x), static_cast<int>(d_end.y));
+                                break;
+                            default:
+                                break;
+                        }
+                    }
+                    // SDL_SetRenderDrawColor(renderer, 0xFF, 0x0, 0x0, 0xFF); //red
+                    // ball_dir_lineA = (gamestate.active_balls[i].position * gamestate.active_balls[i].direction);
+                    // ball_dir_lineB = (gamestate.active_balls[i].position * gamestate.active_balls[i].direction)*20;
+                    // std::cout << ball_dir_lineA << " " << ball_dir_lineB << std::endl;
+                    // SDL_RenderDrawLine(renderer, static_cast<int>(ball_dir_lineA.x), static_cast<int>(ball_dir_lineA.y), static_cast<int>(ball_dir_lineB.x), static_cast<int>(ball_dir_lineB.y));
+                    // SDL_SetRenderDrawColor(renderer, 0x0, 0x0, 0x0, 0xFF); //black
+                    //back to black
+                    SDL_SetRenderDrawColor(renderer, 0x0, 0x0, 0x0, 0xFF);
+                }
 
                 if (collision_debug) {
                     // all collision boxes (to check for alignment)
@@ -694,6 +766,24 @@ int main(int argc, char **argv) {
                         }
                     } 
                     //walls
+                    for (int y = 0; y < SCREEN_TILE_HEIGHT; y++) {
+                        for(int x = 0; x < SCREEN_TILE_WIDTH; x++) {
+                            switch (gamestate.walls[SCREEN_TILE_WIDTH*y+x].wall_type) {
+                                case UL_CORNER_WALL:
+                                case UR_CORNER_WALL:
+                                case LL_CORNER_WALL:
+                                case LR_CORNER_WALL:
+                                case LEFT_WALL:
+                                case TOP_WALL:
+                                case BOTTOM_WALL:
+                                case RIGHT_WALL:
+                                    SDL_RenderDrawRect(renderer, &gamestate.walls[SCREEN_TILE_WIDTH*y+x].collider);
+                                case EMPTY:
+                                default:
+                                    break;
+                            }
+                        }
+                    }
                     //back to black
                     SDL_SetRenderDrawColor(renderer, 0x0, 0x0, 0x0, 0xFF); 
                 }
@@ -709,7 +799,7 @@ int main(int argc, char **argv) {
                 }
                 //swap buffers
                 SDL_RenderPresent(renderer);
-                SDL_Delay(1000/60); //wait for 60ms
+                SDL_Delay(1000/60); //wait for 60ms //HACK //Might need to measure how long things take per frame and wait X amount of ms to match desired fps (let's deal with FPS later)
             }
         }
     }
