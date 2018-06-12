@@ -15,7 +15,7 @@ const int BRICK_TILE_HEIGHT = 12;
 const float BALL_SPEED = 320.0; //pixels / second
 // const int MAX_BALL_SPEED = 10;
 // const int MIN_PADDLE_SPEED = 1;
-const float PADDLE_SPEED = 160; //pixels / second
+const float PADDLE_SPEED = 320.0; //pixels / second
 // const int MAX_PADDLE_SPEED = 10;
 const int BALL_WIDTH = 4;
 const int BALL_HEIGHT = 4;
@@ -50,6 +50,12 @@ const int WALL_THICKNESS = 6;
 #define LR_CORNER_WALL     (18)
 #define EMPTY              (19)
 
+//game state FSM
+#define START   (0)
+#define PAUSE   (1)
+#define PLAY    (2)
+#define OVER    (3)
+
 struct Ball {
     int ball_type;
     vector2 position;
@@ -75,10 +81,10 @@ struct Wall {
 };
 
 struct GameState {
-    bool gameover; //is the game over?
-    bool paused;
+    int state;
     int score;
     int balls; //lives
+    int level;
     Paddle paddle;
     Ball active_balls[3];
     Brick bricks[BRICK_WIDTH*BRICK_HEIGHT];
@@ -89,6 +95,9 @@ SDL_Color WHITE = { 255, 255, 255, 255 };
 
 SDL_Rect sprites[15];
 
+std::stringstream scoreText;
+std::stringstream livesText;
+std::stringstream levelText;
 SDL_Window* window = NULL;
 SDL_Renderer* renderer = NULL;
 SDL_Texture* tilemap = NULL;
@@ -291,6 +300,42 @@ void renderTextureEx(SDL_Texture* tex, SDL_Renderer* ren, int x, int y, SDL_Rect
     renderTextureEx(tex, ren, dst, clip, angle, center, flip);
 }
 
+void renderStatus(SDL_Renderer *ren, GameState &gamestate) {
+    int iW, iH;
+
+    scoreText.str("");
+    scoreText << "Score: " << gamestate.score; 
+    SDL_Texture* score = loadText_to_Texture(scoreText.str().c_str(), ren);
+    SDL_QueryTexture(score, NULL, NULL, &iW, &iH);
+    renderTexture(score, ren, WALL_THICKNESS*2, SCREEN_HEIGHT-WALL_THICKNESS*2);
+
+    livesText.str("");
+    livesText << "Balls: " << gamestate.balls; 
+    SDL_Texture* lives = loadText_to_Texture(livesText.str().c_str(), ren);
+    SDL_QueryTexture(lives, NULL, NULL, &iW, &iH);
+    renderTexture(lives, ren, SCREEN_WIDTH-iW-WALL_THICKNESS*2, SCREEN_HEIGHT-WALL_THICKNESS*2);
+
+    SDL_Texture* status;
+    switch (gamestate.state) {
+        case START:
+            status = loadText_to_Texture("B R E A K O U T", ren);
+            break;
+        case OVER:
+            status = loadText_to_Texture("GAME OVER", ren);
+            break;
+        case PAUSE:
+            levelText.str("");
+            levelText << "Paused - Level " << gamestate.level;
+            status = loadText_to_Texture(levelText.str().c_str(), ren);
+            break;
+        default: 
+            status = loadText_to_Texture(" ", ren);
+            break;
+    }
+    SDL_QueryTexture(status, NULL, NULL, &iW, &iH);
+    renderTexture(status, ren, SCREEN_WIDTH/2 - iW/2, SCREEN_HEIGHT/2);
+}
+
 void renderArena(SDL_Renderer *ren, SDL_Texture *tm, GameState &gamestate) {
     //write background, then arena, then bricks, then paddle and then ball
     //could optimize this by drawing the arena once, then storing it in a layer to blit
@@ -327,25 +372,32 @@ void renderArena(SDL_Renderer *ren, SDL_Texture *tm, GameState &gamestate) {
     //draw bricks (12px tall, full tile is 32px, 10px buffer around each, 32px wide)
     for (int y = 0; y < BRICK_HEIGHT; y++) {
         for (int x = 0; x < BRICK_WIDTH; x++) {
-            renderTexture(tm, ren, (x+1)*TILE_SIZE, y*BRICK_TILE_HEIGHT, &sprites[gamestate.bricks[BRICK_WIDTH*y+x].brick_type]);
+            if (gamestate.bricks[BRICK_WIDTH*y+x].brick_type != EMPTY) {
+                renderTexture(tm, ren, (x+1)*TILE_SIZE, y*BRICK_TILE_HEIGHT, &sprites[gamestate.bricks[BRICK_WIDTH*y+x].brick_type]);
+            }
         }
     }
 
+    //write text        
+    renderStatus(renderer, gamestate);
+
     //TODO: optimize away some of these constants into #defines
     //draw paddle
-    switch (gamestate.paddle.size) {
-        case 1:
-            renderTexture(tm, ren, gamestate.paddle.position.x-((TILE_SIZE/2)-(PADDLE_WIDTH/2)), gamestate.paddle.position.y-((TILE_SIZE/2)-(PADDLE_HEIGHT/2)), &sprites[PADDLE]);
-            break;
-        case 2:
-            renderTexture(tm, ren, gamestate.paddle.position.x-((TILE_SIZE)-(PADDLE_2_WIDTH/2)), gamestate.paddle.position.y-((TILE_SIZE/2)-(PADDLE_HEIGHT/2)), &sprites[LONG_PADDLE_LEFT]);
-            renderTexture(tm, ren, gamestate.paddle.position.x+(PADDLE_2_WIDTH/2), gamestate.paddle.position.y-((TILE_SIZE/2)-(PADDLE_HEIGHT/2)), &sprites[LONG_PADDLE_RIGHT]);
-            break;
-        case 3:
-            renderTexture(tm, ren, gamestate.paddle.position.x-((TILE_SIZE/2)-(PADDLE_WIDTH/2)), gamestate.paddle.position.y-((TILE_SIZE/2)-(PADDLE_HEIGHT/2)), &sprites[PADDLE]);
-            break;
-        default:
-            break;
+    if (gamestate.state != START && gamestate.state != OVER) {
+        switch (gamestate.paddle.size) {
+            case 1:
+                renderTexture(tm, ren, gamestate.paddle.position.x-((TILE_SIZE/2)-(PADDLE_WIDTH/2)), gamestate.paddle.position.y-((TILE_SIZE/2)-(PADDLE_HEIGHT/2)), &sprites[PADDLE]);
+                break;
+            case 2:
+                renderTexture(tm, ren, gamestate.paddle.position.x-((TILE_SIZE)-(PADDLE_2_WIDTH/2)), gamestate.paddle.position.y-((TILE_SIZE/2)-(PADDLE_HEIGHT/2)), &sprites[LONG_PADDLE_LEFT]);
+                renderTexture(tm, ren, gamestate.paddle.position.x+(PADDLE_2_WIDTH/2), gamestate.paddle.position.y-((TILE_SIZE/2)-(PADDLE_HEIGHT/2)), &sprites[LONG_PADDLE_RIGHT]);
+                break;
+            // case 3:
+            //     renderTexture(tm, ren, gamestate.paddle.position.x-((TILE_SIZE/2)-(PADDLE_WIDTH/2)), gamestate.paddle.position.y-((TILE_SIZE/2)-(PADDLE_HEIGHT/2)), &sprites[PADDLE]);
+            //     break;
+            default:
+                break;
+        }
     }
     
     //draw ball
@@ -363,41 +415,6 @@ void renderArena(SDL_Renderer *ren, SDL_Texture *tm, GameState &gamestate) {
         }
     }
 }
-
-/*
-void renderStatus(SDL_Renderer *ren, GameState &gamestate) {
-    if (!gamestate.gameover) {
-        if (gamestate.turn) {
-            SDL_Texture* image = loadText_to_Texture("It's my turn!", ren);
-            int iW, iH;
-            SDL_QueryTexture(image, NULL, NULL, &iW, &iH);
-            renderTexture(image, ren, SCREEN_WIDTH/2 - iW/2, SCREEN_HEIGHT-TILE_SIZE/2);
-        } else {
-            SDL_Texture* image = loadText_to_Texture("It's the human's turn.", ren);
-            int iW, iH;
-            SDL_QueryTexture(image, NULL, NULL, &iW, &iH);
-            renderTexture(image, ren, SCREEN_WIDTH/2 - iW/2, SCREEN_HEIGHT-TILE_SIZE/2);
-        }
-    } else {
-        if (gamestate.tie) {
-            SDL_Texture* image = loadText_to_Texture("A tie.", ren);
-            int iW, iH;
-            SDL_QueryTexture(image, NULL, NULL, &iW, &iH);
-            renderTexture(image, ren, SCREEN_WIDTH/2 - iW/2, SCREEN_HEIGHT-TILE_SIZE/2);
-        } else if (gamestate.turn) {            
-            SDL_Texture* image = loadText_to_Texture("I won!", ren);
-            int iW, iH;
-            SDL_QueryTexture(image, NULL, NULL, &iW, &iH);
-            renderTexture(image, ren, SCREEN_WIDTH/2 - iW/2, SCREEN_HEIGHT-TILE_SIZE/2);
-        } else {
-            SDL_Texture* image = loadText_to_Texture("The human won.", ren);
-            int iW, iH;
-            SDL_QueryTexture(image, NULL, NULL, &iW, &iH);
-            renderTexture(image, ren, SCREEN_WIDTH/2 - iW/2, SCREEN_HEIGHT-TILE_SIZE/2);
-        }
-    }
-}
-*/
 
 void resetBallsPaddles(GameState &gamestate) {
     gamestate.paddle.size = 2;
@@ -418,7 +435,7 @@ void resetBallsPaddles(GameState &gamestate) {
     gamestate.active_balls[2].collider = {static_cast<int>(gamestate.active_balls[2].position.x),static_cast<int>(gamestate.active_balls[2].position.y),BALL_WIDTH,BALL_HEIGHT};
 }
 
-void loadLevel(GameState &gamestate, int LevelNum = 0) {
+void loadLevel(GameState &gamestate) {
     //arena walls 
     //arena wall colliders
     for (int y = 0; y < SCREEN_TILE_HEIGHT; y++) {
@@ -450,7 +467,7 @@ void loadLevel(GameState &gamestate, int LevelNum = 0) {
     }
 
     //bricks
-    switch (LevelNum) {
+    switch (gamestate.level) {
         case 1:
             //simple rainbow
             for (int y = 0; y < BRICK_HEIGHT; y++) {
@@ -475,6 +492,15 @@ void loadLevel(GameState &gamestate, int LevelNum = 0) {
                 }
             }
             break;
+        case 2:
+            // simple box
+            for (int y = 0; y < BRICK_HEIGHT; y++) {
+                for (int x = 0; x < BRICK_WIDTH; x++) {
+                    if (x == 0 || y == 0 || x == BRICK_WIDTH-1 || y == BRICK_HEIGHT-1) {
+                        gamestate.bricks[BRICK_WIDTH*y+x] = {GREEN_BRICK,{(x+1)*TILE_SIZE,(y*BRICK_TILE_HEIGHT)+((TILE_SIZE/2)-(BRICK_TILE_HEIGHT/2)),TILE_SIZE,BRICK_TILE_HEIGHT}};
+                    }
+                }
+            }
         default:
             //populate empty bricks
             for (int y = 0; y < BRICK_HEIGHT; y++) {
@@ -573,10 +599,18 @@ void moveBalls(GameState &gamestate, float delta) {
                                 gamestate.active_balls[i].position = prev_pos;
                                 gamestate.active_balls[i].collider.x = static_cast<int>(gamestate.active_balls[i].position.x);
                                 gamestate.active_balls[i].collider.y = static_cast<int>(gamestate.active_balls[i].position.y);
+                                //TODO: make sure normals are correct for all collisions with the brick (sides, top, bottom)
                                 gamestate.active_balls[i].direction = normalize(reflect(gamestate.active_balls[i].direction * BALL_SPEED, v2(0.0,1.0)));
                                 //break the brick!
+                                switch (gamestate.bricks[BRICK_WIDTH*y+x].brick_type) {
+                                    case RED_BRICK:     gamestate.score += 10; break;
+                                    case GREEN_BRICK:   gamestate.score += 20; break;
+                                    case BLUE_BRICK:    gamestate.score += 30; break;
+                                    case VIOLET_BRICK:  gamestate.score += 40; break;
+                                    case YELLOW_BRICK:  gamestate.score += 50; break;
+                                    default:            break;
+                                }
                                 gamestate.bricks[BRICK_WIDTH*y+x].brick_type = EMPTY;
-                                //TODO: make sure normals are correct for all collisions with the brick (sides, top, bottom)
                             }
                         }
                     }
@@ -599,7 +633,9 @@ void moveBalls(GameState &gamestate, float delta) {
                 if ( gamestate.active_balls[i].position.y > SCREEN_HEIGHT || gamestate.active_balls[i].position.y < 0 || gamestate.active_balls[i].position.x < 0 || gamestate.active_balls[i].position.x > SCREEN_WIDTH) {
                     // went off the level, lose a life and restart
                     gamestate.balls -= 1;
+                    gamestate.state = PAUSE;
                     resetBallsPaddles(gamestate);
+                    gamestate.active_balls[0].direction = {0.0, 1.0};
                 }
 
                 break;
@@ -638,13 +674,12 @@ int main(int argc, char **argv) {
             int reflection_debug = 0;
             int delta_ticks = 0;
             int frame_ticks = 0;
-            //setup gamestate and first level loadout (maybe spit into two structs??)
-            gamestate.gameover = false;
-            gamestate.paused = false;
-            gamestate.score = 0;
-            gamestate.balls = 3;
-            resetBallsPaddles(gamestate);
-            loadLevel(gamestate, 1);
+
+            //starting initialization
+            gamestate.state = START;
+            // gamestate.score = 0;
+            // gamestate.balls = 3;
+            // gamestate.level = 1;
 
             while (!quit) {
                 SDL_Event event;
@@ -661,7 +696,7 @@ int main(int argc, char **argv) {
 
                     //TODO: cleanup player input controls, it feels bad
                     if (event.type == SDL_KEYDOWN && event.key.repeat == 0) {
-                        switch(event.key.keysym.sym) { //wonky ball manual movement code for testing collisions
+                        switch (event.key.keysym.sym) { //wonky ball manual movement code for testing collisions
                             case SDLK_1:     
                                 guideline_debug = !guideline_debug; 
                                 break;
@@ -691,12 +726,26 @@ int main(int argc, char **argv) {
                                 break;
                             case SDLK_KP_ENTER:
                             case SDLK_RETURN:
-                                gamestate.active_balls[0].direction = { 0.0, 1.0};
-                                break; // start moving down
+                                switch (gamestate.state) {
+                                    case START:
+                                        gamestate.level = 1;
+                                        loadLevel(gamestate);
+                                        resetBallsPaddles(gamestate);
+                                        gamestate.active_balls[0].direction = {0.0, 1.0};
+                                        gamestate.state = PAUSE;
+                                        break;
+                                    case PAUSE:
+                                        gamestate.state = PLAY; 
+                                        break;
+                                    case PLAY: gamestate.state = PAUSE; break;
+                                    case OVER: gamestate.state = START; break;
+                                    default: break;
+                                }
+                                break;
                         }
                     } else if(event.type == SDL_KEYUP && event.key.repeat == 0) {
                         //Adjust the velocity
-                        switch(event.key.keysym.sym) {
+                        switch (event.key.keysym.sym) {
                             case SDLK_w:
                             case SDLK_s:
                             case SDLK_a:
@@ -713,16 +762,38 @@ int main(int argc, char **argv) {
                     }
                 }
 
-                if (!gamestate.gameover) {
-                    delta_ticks = SDL_GetTicks() - frame_ticks;
-                    float delta = delta_ticks / 1000.0;
+                delta_ticks = SDL_GetTicks() - frame_ticks;
+                float delta = delta_ticks / 1000.0;
 
-                    moveBalls(gamestate, delta);
-                    movePaddle(gamestate, delta);
-
-                    frame_ticks = SDL_GetTicks();
+                switch (gamestate.state) {
+                    case START:
+                        gamestate.score = 0;
+                        gamestate.balls = 3;
+                        gamestate.level = 0;
+                        loadLevel(gamestate);
+                        break;
+                    case PAUSE:
+                        break;
+                    case PLAY:
+                        moveBalls(gamestate, delta);
+                        movePaddle(gamestate, delta);
+                        if (gamestate.balls == 0) {
+                            gamestate.state = OVER;
+                        }
+                        if (gamestate.level == 1 && gamestate.score >= 1000) {
+                            gamestate.level += 1;
+                            loadLevel(gamestate);
+                            resetBallsPaddles(gamestate);
+                            gamestate.active_balls[0].direction = {0.0, 1.0};
+                            gamestate.state = PAUSE;
+                        }
+                    case OVER:
+                    default: break;
                 }
+                    //if score > 1000, go to next level
 
+                frame_ticks = SDL_GetTicks();
+                
                 //clear backbuffer
                 SDL_RenderClear(renderer);
                 //write to backbuffer
@@ -731,10 +802,8 @@ int main(int argc, char **argv) {
                 //LazyFoo 9, viewports! (minimaps)
                 //LazyFoo12, renderer color modulation (filter with color)
                 //LazyFoo13, renderer alpha blending
-                //write background, then arena, then bricks, then paddle and then ball
+                //write arena, then bricks, then paddle and then ball
                 renderArena(renderer, tilemap, gamestate);
-                //write text        
-                // renderStatus(renderer, gamestate);
 
                 if (reflection_debug) {
                     vector2 d_start;
@@ -769,15 +838,22 @@ int main(int argc, char **argv) {
                     d_end = d_start + (v2(0.0,-1.0)*30);
                     SDL_RenderDrawLine(renderer, static_cast<int>(d_start.x), static_cast<int>(d_start.y), static_cast<int>(d_end.x), static_cast<int>(d_end.y));
                     
+                    int pw = 0;
+                    switch (gamestate.paddle.size) {
+                        case 1: pw = PADDLE_WIDTH; break;
+                        case 2: pw = PADDLE_2_WIDTH; break;
+                        case 3: pw = PADDLE_3_WIDTH; break;
+                        default: break;
+                    }
                     SDL_SetRenderDrawColor(renderer, 0x0, 0xFF, 0x0, 0xFF); //green
-                    d_start = gamestate.paddle.position + v2(static_cast<float>(PADDLE_WIDTH/2),0.0);
+                    d_start = gamestate.paddle.position + v2(static_cast<float>(pw/2),0.0);
                     d_end = d_start + (v2(0.0,-1.0)*10);     
                     SDL_RenderDrawLine(renderer, static_cast<int>(d_start.x), static_cast<int>(d_start.y), static_cast<int>(d_end.x), static_cast<int>(d_end.y));
 
                     SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0x0, 0xFF); //yellow
-                    d_start = gamestate.paddle.position + v2(static_cast<float>(PADDLE_WIDTH),0.0);
+                    d_start = gamestate.paddle.position + v2(static_cast<float>(pw),0.0);
                     d_end = d_start + (v2(0.0,-1.0)*30);     
-                    SDL_RenderDrawLine(renderer, static_cast<int>(d_start.x), static_cast<int>(d_start.y), static_cast<int>(d_end.x), static_cast<int>(d_end.y));
+                    SDL_RenderDrawLine(renderer, static_cast<int>(d_start.x), static_cast<int>(d_start.y), static_cast<int>(d_end.x), static_cast<int>(d_end.y));  
 
                     // SDL_SetRenderDrawColor(renderer, 0xFF, 0x0, 0x0, 0xFF); //red
                     // ball_dir_lineA = (gamestate.active_balls[i].position * gamestate.active_balls[i].direction);
@@ -850,6 +926,7 @@ int main(int argc, char **argv) {
                 //swap buffers
                 SDL_RenderPresent(renderer); //TODO: already using delta for calculating position, use it to calculate stable frames
                 SDL_Delay(1000/60); //wait for 60ms //HACK //Might need to measure how long things take per frame and wait X amount of ms to match desired fps (let's deal with FPS later)
+                //TODO: dragging the window causes weird things to happen, perhaps pause when the window is moved or loses focus?
             }
         }
     }
