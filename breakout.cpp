@@ -437,7 +437,7 @@ void resetBallsPaddles(GameState &gamestate) {
     gamestate.active_balls[2].collider = {static_cast<int>(gamestate.active_balls[2].position.x),static_cast<int>(gamestate.active_balls[2].position.y),BALL_WIDTH,BALL_HEIGHT};
 }
 
-void loadLevel(GameState &gamestate) {
+void loadLevel(GameState &gamestate, int num = -1) {
     //arena walls 
     //arena wall colliders
     for (int y = 0; y < SCREEN_TILE_HEIGHT; y++) {
@@ -468,8 +468,15 @@ void loadLevel(GameState &gamestate) {
         }
     }
 
+    int level;
+    if (num == -1) {
+        level = gamestate.level;
+    } else {
+        level = num;
+    }
+    
     //bricks
-    switch (gamestate.level) {
+    switch (level) {
         case 1:
             //simple rainbow
             for (int y = 0; y < BRICK_HEIGHT; y++) {
@@ -503,6 +510,15 @@ void loadLevel(GameState &gamestate) {
                     }
                 }
             }
+            break;
+        case 3:
+            // random bricks
+            for (int y = 0; y < BRICK_HEIGHT; y++) {
+                for (int x = 0; x < BRICK_WIDTH; x++) {
+                    gamestate.bricks[BRICK_WIDTH*y+x] = {rand() % 5,{(x+1)*TILE_SIZE,(y*BRICK_TILE_HEIGHT)+((TILE_SIZE/2)-(BRICK_TILE_HEIGHT/2)),TILE_SIZE,BRICK_TILE_HEIGHT}};
+                }
+            }
+            break;
         default:
             //populate empty bricks
             for (int y = 0; y < BRICK_HEIGHT; y++) {
@@ -785,7 +801,15 @@ int main(int argc, char **argv) {
                         if (gamestate.balls == 0) {
                             gamestate.state = OVER;
                         }
-                        if (gamestate.level == 1 && gamestate.score >= 1000) {
+                        if (gamestate.level == 1 && gamestate.score >= 100) {
+                            loadLevel(gamestate, 0);
+                            gamestate.level += 1;
+                            loadLevel(gamestate);
+                            resetBallsPaddles(gamestate);
+                            gamestate.active_balls[0].direction = {0.0, 1.0};
+                            gamestate.state = PAUSE;
+                        } else if (gamestate.level == 2 && gamestate.score >= 200) {
+                            loadLevel(gamestate, 0);
                             gamestate.level += 1;
                             loadLevel(gamestate);
                             resetBallsPaddles(gamestate);
