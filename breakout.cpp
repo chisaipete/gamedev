@@ -6,6 +6,8 @@
 const int TILE_SIZE = 32;
 const int SCREEN_TILE_WIDTH = 20;
 const int SCREEN_TILE_HEIGHT = 15;
+const int SCREEN_FPS = 60;
+const int SCREEN_TICKS_PER_FRAME = 1000 / SCREEN_FPS;
 const int SCREEN_WIDTH = TILE_SIZE*SCREEN_TILE_WIDTH; //640
 const int SCREEN_HEIGHT = TILE_SIZE*SCREEN_TILE_HEIGHT; //480
 const int BRICK_WIDTH = SCREEN_TILE_WIDTH-2;
@@ -674,6 +676,8 @@ int main(int argc, char **argv) {
             int reflection_debug = 0;
             int delta_ticks = 0;
             int frame_ticks = 0;
+            int deltaframe_ticks = 0;
+            int fullframe_ticks = 0;
 
             //starting initialization
             gamestate.state = START;
@@ -682,6 +686,7 @@ int main(int argc, char **argv) {
             // gamestate.level = 1;
 
             while (!quit) {
+                fullframe_ticks = SDL_GetTicks();
                 SDL_Event event;
 
                 while (SDL_PollEvent(&event)) {
@@ -924,8 +929,13 @@ int main(int argc, char **argv) {
                     SDL_SetRenderDrawColor(renderer, 0x0, 0x0, 0x0, 0xFF);
                 }
                 //swap buffers
-                SDL_RenderPresent(renderer); //TODO: already using delta for calculating position, use it to calculate stable frames
-                SDL_Delay(1000/60); //wait for 60ms //HACK //Might need to measure how long things take per frame and wait X amount of ms to match desired fps (let's deal with FPS later)
+                SDL_RenderPresent(renderer); 
+
+                //already using delta for calculating position, now using to cap fps at 60
+                deltaframe_ticks = SDL_GetTicks() - fullframe_ticks;
+                if (deltaframe_ticks < SCREEN_TICKS_PER_FRAME) {
+                    SDL_Delay(SCREEN_TICKS_PER_FRAME - deltaframe_ticks);
+                }
                 //TODO: dragging the window causes weird things to happen, perhaps pause when the window is moved or loses focus?
             }
         }
