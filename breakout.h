@@ -21,6 +21,9 @@ std::ostream &operator<<(std::ostream &os, vector2 const &A) {
     return os << A.x << "," << A.y;
 }
 
+std::ostream &operator<<(std::ostream &os, SDL_Rect const &R) { 
+    return os << "x:"<< R.x << " y:" << R.y << " w:" << R.w << " h:" << R.h;
+}
 
 // convert pair of floats to vector2
 vector2 v2(float A, float B) {
@@ -98,12 +101,23 @@ float square(float A) {
 
 vector2 reflect(vector2 v, vector2 normal) {
     vector2 r;
-    r = v - (2*(dot(v,normal))*normal);
+    r = v - 2*(dot(normal,v))*normal;
     return r;
 };
 
-vector2 normalize(vector2 v, float magintude) {
+
+float length_sq(vector2 v) {
+    float r = dot(v,v);
+    return r;
+};
+
+float length(vector2 v) {
+    float r = sqrt(length_sq(v));
+    return r;
+};
+
+vector2 normalize(vector2 v) {
     vector2 r;
-    r = v*(1/magintude);
+    r = v*(1.0/length(v));
     return r;
 };

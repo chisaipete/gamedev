@@ -11,15 +11,17 @@ const int SCREEN_HEIGHT = TILE_SIZE*SCREEN_TILE_HEIGHT; //480
 const int BRICK_WIDTH = SCREEN_TILE_WIDTH-2;
 const int BRICK_HEIGHT = SCREEN_TILE_HEIGHT;
 const int BRICK_TILE_HEIGHT = 12;
-const int MIN_BALL_SPEED = 1;
+// const int MIN_BALL_SPEED = 1;
 const float BALL_SPEED = 320.0; //pixels / second
-const int MAX_BALL_SPEED = 10;
-const int MIN_PADDLE_VELOCITY = 1;
-const int PADDLE_VELOCITY = 320; //pixels / second
-const int MAX_PADDLE_VELOCITY = 10;
+// const int MAX_BALL_SPEED = 10;
+// const int MIN_PADDLE_SPEED = 1;
+const float PADDLE_SPEED = 160; //pixels / second
+// const int MAX_PADDLE_SPEED = 10;
 const int BALL_WIDTH = 4;
 const int BALL_HEIGHT = 4;
 const int PADDLE_WIDTH = 28; //varies if wider
+const int PADDLE_2_WIDTH = 60; //varies if wider
+const int PADDLE_3_WIDTH = 92; //varies if wider
 const int PADDLE_HEIGHT = 7;
 const int WALL_THICKNESS = 6;
 
@@ -55,6 +57,13 @@ struct Ball {
     SDL_Rect collider;
 };
 
+struct Paddle {
+    int size;
+    vector2 position;
+    vector2 direction;
+    SDL_Rect collider;
+};
+
 struct Brick {
     int brick_type;
     SDL_Rect collider;
@@ -70,10 +79,7 @@ struct GameState {
     bool paused;
     int score;
     int balls; //lives
-    SDL_Point paddle_pos;
-    SDL_Point paddle_velocity;
-    int paddle_size;
-    SDL_Rect paddle_collider;
+    Paddle paddle;
     Ball active_balls[3];
     Brick bricks[BRICK_WIDTH*BRICK_HEIGHT];
     Wall walls[SCREEN_TILE_WIDTH*SCREEN_TILE_HEIGHT];
@@ -327,9 +333,16 @@ void renderArena(SDL_Renderer *ren, SDL_Texture *tm, GameState &gamestate) {
 
     //TODO: optimize away some of these constants into #defines
     //draw paddle
-    switch (gamestate.paddle_size) {
+    switch (gamestate.paddle.size) {
         case 1:
-            renderTexture(tm, ren, gamestate.paddle_pos.x-((TILE_SIZE/2)-(PADDLE_WIDTH/2)), gamestate.paddle_pos.y-((TILE_SIZE/2)-(PADDLE_HEIGHT/2)), &sprites[PADDLE]);
+            renderTexture(tm, ren, gamestate.paddle.position.x-((TILE_SIZE/2)-(PADDLE_WIDTH/2)), gamestate.paddle.position.y-((TILE_SIZE/2)-(PADDLE_HEIGHT/2)), &sprites[PADDLE]);
+            break;
+        case 2:
+            renderTexture(tm, ren, gamestate.paddle.position.x-((TILE_SIZE)-(PADDLE_2_WIDTH/2)), gamestate.paddle.position.y-((TILE_SIZE/2)-(PADDLE_HEIGHT/2)), &sprites[LONG_PADDLE_LEFT]);
+            renderTexture(tm, ren, gamestate.paddle.position.x+(PADDLE_2_WIDTH/2), gamestate.paddle.position.y-((TILE_SIZE/2)-(PADDLE_HEIGHT/2)), &sprites[LONG_PADDLE_RIGHT]);
+            break;
+        case 3:
+            renderTexture(tm, ren, gamestate.paddle.position.x-((TILE_SIZE/2)-(PADDLE_WIDTH/2)), gamestate.paddle.position.y-((TILE_SIZE/2)-(PADDLE_HEIGHT/2)), &sprites[PADDLE]);
             break;
         default:
             break;
@@ -387,10 +400,10 @@ void renderStatus(SDL_Renderer *ren, GameState &gamestate) {
 */
 
 void resetBallsPaddles(GameState &gamestate) {
-    gamestate.paddle_pos = {(SCREEN_WIDTH/2)-(PADDLE_WIDTH/2), SCREEN_HEIGHT-(TILE_SIZE-(TILE_SIZE/2))-(PADDLE_HEIGHT/2)};
-    gamestate.paddle_size = 1;
-    gamestate.paddle_collider = {gamestate.paddle_pos.x,gamestate.paddle_pos.y,PADDLE_WIDTH,PADDLE_HEIGHT};
-    gamestate.paddle_velocity = {0,0};
+    gamestate.paddle.size = 2;
+    gamestate.paddle.direction = {0,0};
+    gamestate.paddle.position = {(SCREEN_WIDTH/2)-(PADDLE_2_WIDTH/2), SCREEN_HEIGHT-(TILE_SIZE-(TILE_SIZE/2))-(PADDLE_HEIGHT/2)};
+    gamestate.paddle.collider = {static_cast<int>(gamestate.paddle.position.x),static_cast<int>(gamestate.paddle.position.y),PADDLE_2_WIDTH,PADDLE_HEIGHT};
     gamestate.active_balls[0].ball_type = BALL;
     gamestate.active_balls[0].position = {static_cast<float>((SCREEN_WIDTH/2)-(BALL_WIDTH/2)), static_cast<float>(SCREEN_HEIGHT-(TILE_SIZE+BRICK_TILE_HEIGHT)-(BALL_HEIGHT/2))};
     gamestate.active_balls[0].direction = {0.0,0.0};
@@ -501,22 +514,14 @@ bool checkPixCollision() {
 
 void moveBalls(GameState &gamestate, float delta) {
     vector2 prev_pos;
-    vector2 unit_vector = v2(0.0,-1.0); // 0*
-    // vector2 unit_vector = v2(0.5,-0.866025); //30*
-    // vector2 unit_vector = v2(0.707106,-0.707106); //45*
-    // vector2 unit_vector = v2(0.0,-1.0); //90*
-    // sin(A) = x/1 cos(A) = y/1
-
-    // vector2 ball_dir_lineA, ball_dir_lineB;
-
+    vector2 collision_normal;       // for paddle collision
+    float desired_effect = 0.001;   // for paddle collision
 
     for (int i = 0; i < 3; i++) {  //up to 3 balls
         switch (gamestate.active_balls[i].ball_type) {
             case FIRE_BALL:
             case BALL:
-
-                prev_pos = gamestate.active_balls[i].position;
-                
+                prev_pos = gamestate.active_balls[i].position;                
                 gamestate.active_balls[i].position = gamestate.active_balls[i].position + gamestate.active_balls[i].direction * BALL_SPEED * delta;
                 gamestate.active_balls[i].collider.x = static_cast<int>(gamestate.active_balls[i].position.x);
                 gamestate.active_balls[i].collider.y = static_cast<int>(gamestate.active_balls[i].position.y);
@@ -526,26 +531,40 @@ void moveBalls(GameState &gamestate, float delta) {
                 for (int y = 0; y < SCREEN_TILE_HEIGHT; y++) {
                     for(int x = 0; x < SCREEN_TILE_WIDTH; x++) {
                         switch (gamestate.walls[SCREEN_TILE_WIDTH*y+x].wall_type) {
-                            case UL_CORNER_WALL:
-                            case UR_CORNER_WALL:
-                            case LL_CORNER_WALL:
-                            case LR_CORNER_WALL:
                             case LEFT_WALL:
+                                if (checkBoxCollision(gamestate.active_balls[i].collider, gamestate.walls[SCREEN_TILE_WIDTH*y+x].collider)) {
+                                    gamestate.active_balls[i].position = prev_pos;
+                                    gamestate.active_balls[i].collider.x = static_cast<int>(gamestate.active_balls[i].position.x);
+                                    gamestate.active_balls[i].collider.y = static_cast<int>(gamestate.active_balls[i].position.y);
+                                    gamestate.active_balls[i].direction = normalize(reflect(gamestate.active_balls[i].direction * BALL_SPEED, v2(1.0,0.0)));
+                                }
                             case TOP_WALL:
+                                if (checkBoxCollision(gamestate.active_balls[i].collider, gamestate.walls[SCREEN_TILE_WIDTH*y+x].collider)) {
+                                    gamestate.active_balls[i].position = prev_pos;
+                                    gamestate.active_balls[i].collider.x = static_cast<int>(gamestate.active_balls[i].position.x);
+                                    gamestate.active_balls[i].collider.y = static_cast<int>(gamestate.active_balls[i].position.y);
+                                    gamestate.active_balls[i].direction = normalize(reflect(gamestate.active_balls[i].direction * BALL_SPEED, v2(0.0,1.0)));
+                                }
                             case BOTTOM_WALL:
                             case RIGHT_WALL:
                                 if (checkBoxCollision(gamestate.active_balls[i].collider, gamestate.walls[SCREEN_TILE_WIDTH*y+x].collider)) {
                                     gamestate.active_balls[i].position = prev_pos;
                                     gamestate.active_balls[i].collider.x = static_cast<int>(gamestate.active_balls[i].position.x);
                                     gamestate.active_balls[i].collider.y = static_cast<int>(gamestate.active_balls[i].position.y);
-                                    gamestate.active_balls[i].direction = normalize(reflect(gamestate.active_balls[i].direction * BALL_SPEED, unit_vector), BALL_SPEED);
+                                    gamestate.active_balls[i].direction = normalize(reflect(gamestate.active_balls[i].direction * BALL_SPEED, v2(-1.0,0.0)));
                                 }
+                            case UL_CORNER_WALL:
+                            //TODO: handle corner collision properly
+                            case UR_CORNER_WALL:
+                            case LL_CORNER_WALL:
+                            case LR_CORNER_WALL:
                             case EMPTY:
                             default:
                                 break;
                         }
                     }
                 }
+
                 //brick check
                 for (int y = 0; y < BRICK_HEIGHT; y++) {
                     for (int x = 0; x < BRICK_WIDTH; x++) {
@@ -554,29 +573,26 @@ void moveBalls(GameState &gamestate, float delta) {
                                 gamestate.active_balls[i].position = prev_pos;
                                 gamestate.active_balls[i].collider.x = static_cast<int>(gamestate.active_balls[i].position.x);
                                 gamestate.active_balls[i].collider.y = static_cast<int>(gamestate.active_balls[i].position.y);
-                                gamestate.active_balls[i].direction = normalize(reflect(gamestate.active_balls[i].direction * BALL_SPEED, unit_vector), BALL_SPEED);
+                                gamestate.active_balls[i].direction = normalize(reflect(gamestate.active_balls[i].direction * BALL_SPEED, v2(0.0,1.0)));
                                 //break the brick!
                                 gamestate.bricks[BRICK_WIDTH*y+x].brick_type = EMPTY;
+                                //TODO: make sure normals are correct for all collisions with the brick (sides, top, bottom)
                             }
                         }
                     }
                 }
-                //paddle check
-                switch (gamestate.paddle_size) {
-                    case 1:
-                        if (checkBoxCollision(gamestate.active_balls[i].collider, gamestate.paddle_collider)) {
-                            gamestate.active_balls[i].position = prev_pos;
-                            gamestate.active_balls[i].collider.x = static_cast<int>(gamestate.active_balls[i].position.x);
-                            gamestate.active_balls[i].collider.y = static_cast<int>(gamestate.active_balls[i].position.y);
-                            //depending on where the ball hit on the paddle, change the angle of deflection (by modifying the normal vector of the paddle)
 
-                            // check for location of 
-                            gamestate.active_balls[i].direction = normalize(reflect(gamestate.active_balls[i].direction * BALL_SPEED, unit_vector), BALL_SPEED);
-                        }
-                        break;
-                    default:
-                        break;
+                //paddle check
+                if (checkBoxCollision(gamestate.active_balls[i].collider, gamestate.paddle.collider)) {
+                    gamestate.active_balls[i].position = prev_pos;
+                    gamestate.active_balls[i].collider.x = static_cast<int>(gamestate.active_balls[i].position.x);
+                    gamestate.active_balls[i].collider.y = static_cast<int>(gamestate.active_balls[i].position.y);
+                    //depending on where the ball hit on the paddle, change the angle of deflection (by modifying the normal vector of the paddle)
+                    //here we're changing the reflection normal (paddle normal) based on the velocity of the paddle and a desired effect scalar
+                    collision_normal = normalize(v2(0.0,-1.0) + ((gamestate.paddle.direction * static_cast<float>(PADDLE_SPEED)) * desired_effect));
+                    gamestate.active_balls[i].direction = normalize(reflect(gamestate.active_balls[i].direction * BALL_SPEED, collision_normal));
                 }
+                
                 //ball check **BONUS**
                 
                 //bounds check
@@ -594,13 +610,19 @@ void moveBalls(GameState &gamestate, float delta) {
 }
 
 void movePaddle(GameState &gamestate, float delta) {
-    gamestate.paddle_pos.x += gamestate.paddle_velocity.x * delta;
-    //check wall collisions
-    gamestate.paddle_collider.x = gamestate.paddle_pos.x;
+    vector2 prev_pos = gamestate.paddle.position;
+    gamestate.paddle.position = gamestate.paddle.position + (gamestate.paddle.direction * PADDLE_SPEED * delta);
+    gamestate.paddle.collider.x = static_cast<int>(gamestate.paddle.position.x);
+    gamestate.paddle.collider.y = static_cast<int>(gamestate.paddle.position.y);
 
-    gamestate.paddle_pos.y += gamestate.paddle_velocity.y * delta;
-    //check wall collisions
-    gamestate.paddle_collider.y = gamestate.paddle_pos.y;
+    //wall check
+    if (checkBoxCollision(gamestate.paddle.collider, gamestate.walls[SCREEN_TILE_WIDTH*(SCREEN_TILE_HEIGHT-1)+0].collider) || 
+        checkBoxCollision(gamestate.paddle.collider, gamestate.walls[SCREEN_TILE_WIDTH*(SCREEN_TILE_HEIGHT-1)+(SCREEN_TILE_WIDTH-1)].collider)) {
+        gamestate.paddle.position = prev_pos;
+        gamestate.paddle.collider.x = static_cast<int>(gamestate.paddle.position.x);
+        gamestate.paddle.collider.y = static_cast<int>(gamestate.paddle.position.y);
+        //TODO: move paddle right up to the edge instead of just stopping movement
+    }
 }
 
 int main(int argc, char **argv) {
@@ -636,6 +658,8 @@ int main(int argc, char **argv) {
                     if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE ) {
                         quit = 1;
                     }
+
+                    //TODO: cleanup player input controls, it feels bad
                     if (event.type == SDL_KEYDOWN && event.key.repeat == 0) {
                         switch(event.key.keysym.sym) { //wonky ball manual movement code for testing collisions
                             case SDLK_1:     
@@ -659,11 +683,11 @@ int main(int argc, char **argv) {
                             case SDLK_d:     
                                 gamestate.active_balls[0].direction = { 1.0,  0.0}; 
                                 break;
-                            case SDLK_LEFT:  
-                                gamestate.paddle_velocity.x -= PADDLE_VELOCITY; 
+                            case SDLK_LEFT:
+                                gamestate.paddle.direction = {-1.0,0.0};
                                 break;
                             case SDLK_RIGHT: 
-                                gamestate.paddle_velocity.x += PADDLE_VELOCITY; 
+                                gamestate.paddle.direction = {1.0,0.0};
                                 break;
                             case SDLK_KP_ENTER:
                             case SDLK_RETURN:
@@ -680,10 +704,10 @@ int main(int argc, char **argv) {
                                 gamestate.active_balls[0].direction = { 0.0,  0.0};
                                 break;
                             case SDLK_LEFT:
-                                gamestate.paddle_velocity.x += PADDLE_VELOCITY;
+                                gamestate.paddle.direction = {0.0, 0.0};
                                 break;
                             case SDLK_RIGHT:
-                                gamestate.paddle_velocity.x -= PADDLE_VELOCITY;
+                                gamestate.paddle.direction = {0.0, 0.0};
                                 break;
                         }
                     }
@@ -722,13 +746,39 @@ int main(int argc, char **argv) {
                             case FIRE_BALL:
                             case BALL:
                                 d_start = gamestate.active_balls[i].position;
-                                d_end   = gamestate.active_balls[i].position + ((gamestate.active_balls[i].direction)*30);
+                                d_end   = d_start + ((gamestate.active_balls[i].direction)*10);
                                 SDL_RenderDrawLine(renderer, static_cast<int>(d_start.x), static_cast<int>(d_start.y), static_cast<int>(d_end.x), static_cast<int>(d_end.y));
+
+                                SDL_SetRenderDrawColor(renderer, 0x0, 0xFF, 0x0, 0xFF); //green
+                                d_start = gamestate.active_balls[i].position + v2(static_cast<float>(BALL_WIDTH/2),0.0);
+                                d_end   = d_start + ((gamestate.active_balls[i].direction)*20);
+                                SDL_RenderDrawLine(renderer, static_cast<int>(d_start.x), static_cast<int>(d_start.y), static_cast<int>(d_end.x), static_cast<int>(d_end.y));
+
+                                SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0x0, 0xFF); //yellow
+                                d_start = gamestate.active_balls[i].position + v2(static_cast<float>(BALL_WIDTH),0.0);
+                                d_end   = d_start + ((gamestate.active_balls[i].direction)*10);
+                                SDL_RenderDrawLine(renderer, static_cast<int>(d_start.x), static_cast<int>(d_start.y), static_cast<int>(d_end.x), static_cast<int>(d_end.y));
+
                                 break;
                             default:
                                 break;
                         }
                     }
+
+                    d_start = gamestate.paddle.position;
+                    d_end = d_start + (v2(0.0,-1.0)*30);
+                    SDL_RenderDrawLine(renderer, static_cast<int>(d_start.x), static_cast<int>(d_start.y), static_cast<int>(d_end.x), static_cast<int>(d_end.y));
+                    
+                    SDL_SetRenderDrawColor(renderer, 0x0, 0xFF, 0x0, 0xFF); //green
+                    d_start = gamestate.paddle.position + v2(static_cast<float>(PADDLE_WIDTH/2),0.0);
+                    d_end = d_start + (v2(0.0,-1.0)*10);     
+                    SDL_RenderDrawLine(renderer, static_cast<int>(d_start.x), static_cast<int>(d_start.y), static_cast<int>(d_end.x), static_cast<int>(d_end.y));
+
+                    SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0x0, 0xFF); //yellow
+                    d_start = gamestate.paddle.position + v2(static_cast<float>(PADDLE_WIDTH),0.0);
+                    d_end = d_start + (v2(0.0,-1.0)*30);     
+                    SDL_RenderDrawLine(renderer, static_cast<int>(d_start.x), static_cast<int>(d_start.y), static_cast<int>(d_end.x), static_cast<int>(d_end.y));
+
                     // SDL_SetRenderDrawColor(renderer, 0xFF, 0x0, 0x0, 0xFF); //red
                     // ball_dir_lineA = (gamestate.active_balls[i].position * gamestate.active_balls[i].direction);
                     // ball_dir_lineB = (gamestate.active_balls[i].position * gamestate.active_balls[i].direction)*20;
@@ -743,7 +793,7 @@ int main(int argc, char **argv) {
                     // all collision boxes (to check for alignment)
                     SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, 0xFF); //white
                     //paddle
-                    SDL_RenderDrawRect(renderer, &gamestate.paddle_collider);
+                    SDL_RenderDrawRect(renderer, &gamestate.paddle.collider);
                     //balls
                     SDL_SetRenderDrawColor(renderer, 0x0, 0xFF, 0x0, 0xFF); //green
                     for (int i = 0; i < 3; i++) {  //up to 3 balls
@@ -798,7 +848,7 @@ int main(int argc, char **argv) {
                     SDL_SetRenderDrawColor(renderer, 0x0, 0x0, 0x0, 0xFF);
                 }
                 //swap buffers
-                SDL_RenderPresent(renderer);
+                SDL_RenderPresent(renderer); //TODO: already using delta for calculating position, use it to calculate stable frames
                 SDL_Delay(1000/60); //wait for 60ms //HACK //Might need to measure how long things take per frame and wait X amount of ms to match desired fps (let's deal with FPS later)
             }
         }
