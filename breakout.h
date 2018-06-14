@@ -74,12 +74,6 @@ vector2 operator+(vector2 A, vector2 B) {
     return r;
 };
 
-// vector2 operator+=(vector2 A, vector2 B) {
-//     vector2 r;
-//     r = A+B;
-//     return r;
-// };
-
 // vector subtract
 vector2 operator-(vector2 A, vector2 B) {
     vector2 r;

@@ -3,6 +3,8 @@
 #include <cstdlib>
 #include <ctime>
 #include <cmath>
+#include <algorithm>
+#include <vector>
 #include <SDL.h>
 #include <SDL_timer.h>
 #include <SDL_image.h>
@@ -14,23 +16,23 @@ TTF_Font* font;
 const int SCREEN_FPS = 60;
 const int SCREEN_TICKS_PER_FRAME = 1000 / SCREEN_FPS;
 
-const int TILE_SIZE = 32;
-const int WELL_TILE_WIDTH = 10;
-const int WELL_TILE_HEIGHT = 22; // top two are "hidden"
-const int SCREEN_TILE_WIDTH = 12;
-const int SCREEN_TILE_HEIGHT = 25; // 
+const int BLOCK_SIZE = 32;
+const int WELL_BLOCK_WIDTH = 10;
+const int WELL_BLOCK_HEIGHT = 22; // top two are "hidden"
+const int SCREEN_BLOCK_WIDTH = 14;
+const int SCREEN_BLOCK_HEIGHT = 25; // 
 
-const int SCREEN_WIDTH = TILE_SIZE*SCREEN_TILE_WIDTH;
-const int SCREEN_HEIGHT = TILE_SIZE*SCREEN_TILE_HEIGHT;
+const int SCREEN_WIDTH = BLOCK_SIZE*SCREEN_BLOCK_WIDTH;
+const int SCREEN_HEIGHT = BLOCK_SIZE*SCREEN_BLOCK_HEIGHT;
 
 //tilemap indexes
-#define PERIWINKLE  ( 0)
-#define NAVY        ( 1)
-#define ORANGE      ( 2)
-#define YELLOW      ( 3)
-#define GREEN       ( 4)
-#define PINK        ( 5)
-#define RED         ( 6)
+const int CYAN   = 0; // I
+const int BLUE   = 1; // J
+const int ORANGE = 2; // L
+const int YELLOW = 3; // O
+const int GREEN  = 4; // S
+const int PURPLE = 5; // T
+const int RED    = 6; // Z
 #define PALETTE     ( 7)
 #define UL_WALL     ( 8)
 #define TOP_WALL    ( 9)
@@ -49,18 +51,18 @@ const int SCREEN_HEIGHT = TILE_SIZE*SCREEN_TILE_HEIGHT;
 // #define PLAY    (2)
 // #define OVER    (3)
 
-struct GameState {
-    int state;
-    int level;
-    int score;
-    int lines;
-    // Paddle paddle;
-    // Ball active_balls[3];
-    // Brick bricks[BRICK_WIDTH*BRICK_HEIGHT];
-    // Wall walls[SCREEN_TILE_WIDTH*SCREEN_TILE_HEIGHT];
-};
+enum Piece       { I, J, L, O, S, T, Z };
+int max_ext[7] = { 4, 3, 3, 2, 3, 3, 3 };
+enum Direction {LEFT, RIGHT, DOWN, HARD_DOWN};
+
+int block_step (int level) {
+    float step_sec;
+    step_sec = pow((0.8-((static_cast<float>(level)-1.0)*0.007)),(static_cast<float>(level)-1.0));
+    int step_ms = static_cast<int>(step_sec*1000.0);
+} 
 
 SDL_Color WHITE = {255,255,255,255};
+SDL_Color RED_ = {255,0,0,255};
 
 unsigned long long rdtsc(){
     unsigned int lo,hi;
@@ -72,28 +74,208 @@ void logSDLError(std::ostream &os, const std::string &msg) {
     os << msg << " SDL Error: " << SDL_GetError() << std::endl;
 }
 
-bool checkBoxCollision(SDL_Rect a, SDL_Rect b) {
-    // assume collision [separating axis text]
-    int leftA, leftB, rightA, rightB, topA, topB, bottomA, bottomB;
-    //sides of a
-    leftA = a.x;
-    rightA = a.x + a.w;
-    topA = a.y;
-    bottomA = a.y + a.h;
-    //sides of b
-    leftB = b.x;
-    rightB = b.x + b.w;
-    topB = b.y;
-    bottomB = b.y + b.h;
-    //check for collisions!
-    if (bottomA <= topB) return false;
-    if (topA >= bottomB) return false;
-    if (rightA <= leftB) return false;
-    if (leftA >= rightB) return false;
-    //none of the sides from a are outside b
-    return true;
+/* VECTOR */
+struct v2 {
+    int x, y;
+};
+
+std::ostream &operator<<(std::ostream &os, v2 const &A) { 
+    return os << A.x << "," << A.y;
 }
 
+// convert pair of ints to v2
+v2 V2(int A, int B) {
+    v2 r;
+    r.x = A;
+    r.y = B;
+    return r;
+};
+
+v2 operator-(v2 A) {
+    v2 r;
+    r.x = -A.x;
+    r.y = -A.y;
+    return r;
+};
+
+v2 operator*(int A, v2 B) {
+    v2 r;
+    r.x = A*B.x;
+    r.y = A*B.y;
+    return r;
+};
+
+v2 operator*(v2 A, int B) {
+    v2 r;
+    r.x = B*A.x;
+    r.y = B*A.y;
+    return r;
+};
+
+v2 operator*(v2 A, v2 B) {
+    v2 r;
+    r.x = A.x*B.x;
+    r.y = A.y*B.y;
+    return r;
+};
+
+v2 operator+(v2 A, v2 B) {
+    v2 r;
+    r.x = A.x+B.x;
+    r.y = A.y+B.y;
+    return r;
+};
+
+v2 operator-(v2 A, v2 B) {
+    v2 r;
+    r.x = A.x-B.x;
+    r.y = A.y-B.y;
+    return r;
+};
+
+/* TETRIS OBJECTS */
+struct Block {
+    int color;
+};
+
+struct Tetrimino {
+    v2 ulpt;
+    Block* blocks[4];
+    v2 rotation[4];
+};
+
+struct GameState {
+    int state;
+    int level;
+    int score;
+    int lines;
+    Tetrimino piece;
+    Block* blocks[WELL_BLOCK_WIDTH*WELL_BLOCK_HEIGHT];
+};
+
+/*
+Generates a sequence of all seven pieces permuted randomly, as if they were drawn from a bag. 
+Deals all seven pieces before generating another bag.
+*/
+class Bag {
+    public:
+        Bag();
+        ~Bag();
+        void shuffle_bag();
+        Piece draw_piece();
+        Piece shake();
+    private:
+        std::vector<Piece> bag; 
+};
+
+Bag::Bag() {
+    bag.reserve(7);
+}
+
+Bag::~Bag() {}
+
+void Bag::shuffle_bag() {
+    while(bag.size() < 7) {
+        bag.push_back(shake());
+    }
+}
+
+Piece Bag::draw_piece() {
+    if (bag.empty()) {
+        shuffle_bag();
+    }
+    Piece p = bag.back();
+    bag.pop_back();
+    return p; 
+}
+
+Piece Bag::shake() {
+    Piece p;
+    do {
+        p = static_cast<Piece>(rand() % 7);
+    } while (std::find(bag.begin(), bag.end(), p) != bag.end());
+    return p;
+}
+
+/* TIMER CLASS */
+class Timer {
+    public:
+        Timer();
+        ~Timer();
+        void start();
+        void stop();
+        void pause();
+        void unpause();
+        int get_ticks();
+        bool is_started();
+        bool is_paused();
+    private:
+        int start_ticks;
+        int paused_ticks;
+        bool paused;
+        bool started;
+};
+
+Timer::Timer() {
+    start_ticks = 0;
+    paused_ticks = 0;
+    paused = false;
+    started = false;
+}
+
+Timer::~Timer() {}
+
+void Timer::start() {
+    started = true;
+    paused = false;
+    start_ticks = SDL_GetTicks();
+    paused_ticks = 0;
+}
+
+void Timer::stop() {
+    started = false;
+    paused = false;
+    start_ticks = 0;
+    paused_ticks = 0;
+}
+
+void Timer::pause() {
+    if (started && !paused) {
+        paused = true;
+        paused_ticks = SDL_GetTicks() - start_ticks;
+        start_ticks = 0;
+    }
+}
+
+void Timer::unpause() {
+    if (started && paused) {
+        paused = false;
+        start_ticks = SDL_GetTicks() - paused_ticks;
+        paused_ticks = 0;
+    }
+}
+
+int Timer::get_ticks() {
+    int time = 0; //stopped time
+    if (started) {
+        if (paused) {
+            time = paused_ticks; //time when paused
+        } else {
+            time = SDL_GetTicks() - start_ticks;  //delta from start to now
+        }
+    }
+    return time;
+}
+
+bool Timer::is_started() {
+    return started;
+}
+
+bool Timer::is_paused() {
+    return paused && started;
+}
+
+/* TEXTURE CLASS */
 class Texture {
     public:
         Texture();
@@ -121,6 +303,15 @@ Texture::Texture() {
 
 Texture::~Texture() {
     free();
+}
+
+void Texture::free() {
+    if (texture != NULL) {
+        SDL_DestroyTexture(texture);
+        texture = NULL;
+        width = 0;
+        height = 0;
+    }
 }
 
 bool Texture::load_from_file(std::string path) {
@@ -166,15 +357,6 @@ bool Texture::load_from_rendered_text(std::string text, SDL_Color color) {
     return texture != NULL;
 }
 
-void Texture::free() {
-    if (texture != NULL) {
-        SDL_DestroyTexture(texture);
-        texture = NULL;
-        width = 0;
-        height = 0;
-    }
-}
-
 void Texture::set_color(int r, int g, int b) {
     SDL_SetTextureColorMod(texture, r, g, b);
 }
@@ -203,4 +385,6 @@ int Texture::get_width() {
 int Texture::get_height() {
     return height;
 }
+
+
 
