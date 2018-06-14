@@ -47,9 +47,9 @@ const int RED    = 6; // Z
 
 //game state FSM
 #define START   (0)
-// #define PAUSE   (1)
-// #define PLAY    (2)
-// #define OVER    (3)
+#define PAUSE   (1)
+#define PLAY    (2)
+#define OVER    (3)
 
 enum Piece       { I, J, L, O, S, T, Z };
 int max_ext[7] = { 4, 3, 3, 2, 3, 3, 3 };
@@ -60,6 +60,24 @@ int block_step (int level) {
     step_sec = pow((0.8-((static_cast<float>(level)-1.0)*0.007)),(static_cast<float>(level)-1.0));
     int step_ms = static_cast<int>(step_sec*1000.0);
 } 
+
+int level_goal (int level) {
+    int goal = 5*level;
+    return goal;
+}
+/*
+Goal of each level L is to earn 5*L points:
+Line clear      WScore
+Single          1
+Double          3
+Triple          5
+Tetris          8
+Tetris B2B      12
+T-spin zero     1
+T-spin single   3
+T-spin double   7
+T-spin triple   6
+*/
 
 SDL_Color WHITE = {255,255,255,255};
 SDL_Color RED_ = {255,0,0,255};

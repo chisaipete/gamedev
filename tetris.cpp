@@ -7,6 +7,8 @@ GameState gs;
 SDL_Rect sprites[18];
 Timer frame_timer;
 Timer fps_timer;
+Timer piece_timer;
+int level_tick;
 std::stringstream levelText;
 std::stringstream scoreText;
 std::stringstream linesText;
@@ -259,102 +261,15 @@ void render_well(bool debug = false) {
     }
 }
 
-void move_piece(Direction d) {
-    //check for collisions with other pieces or the bottom
-    //if it hits the bottom, release to board
-    v2 new_ulpt;
-    v2 poso;
-    v2 posn[4];
-    v2 tmp;
-    switch (d) {
-        case LEFT: new_ulpt = gs.piece.ulpt + V2(-1,0); break;
-        case RIGHT: new_ulpt = gs.piece.ulpt + V2(1,0); break;
-        case DOWN: new_ulpt = gs.piece.ulpt + V2(0,1); break;
-        case HARD_DOWN: 
-        default:
-            break;
-    }
-    //check collisions at new position
-    //walls
-    //check for hitting bottom
-    for (int i = 0; i < 4; i++) {
-        tmp = new_ulpt + gs.piece.rotation[i];
-        // sides
-        if (tmp.x < 0 || tmp.x >= WELL_BLOCK_WIDTH) {
-            return;
-        }
-        // bottom
-        if (tmp.y > 21) {
-            return; // TODO: handle releasing to board
-            //release to board and spawn new piece
-        }
-    }
-
-    //commit new position
-    for (int i = 0; i < 4; i++) {
-        poso = gs.piece.ulpt + gs.piece.rotation[i];
-        posn[i] = new_ulpt + gs.piece.rotation[i];
-        gs.blocks[WELL_BLOCK_WIDTH*(poso.y)+(poso.x)] = NULL;
-    }
-    for (int i = 0; i < 4; i++) {
-        gs.blocks[WELL_BLOCK_WIDTH*(posn[i].y)+(posn[i].x)] = gs.piece.blocks[i];
-    }
-    gs.piece.ulpt = new_ulpt;
-
-
-}
-
 bool release_piece() {
+    std::cout << "RELEASING!" << std::endl;
     for (int i = 0; i < 4; i++) {
         gs.piece.blocks[i] = NULL;
     }
 }
 
-void rotate_piece(bool reverse = false) {
-    int xn, yn, me;
-    v2 poso;
-    v2 posn[4];
-
-    me = max_ext[gs.piece.blocks[0]->color];
-    //reverse rotates to the left, otherwise right
-    if (!reverse) {
-        for (int i = 0; i < 4; i++) {
-            poso = gs.piece.ulpt + gs.piece.rotation[i];
-
-            xn = 1 - (gs.piece.rotation[i].y - (me - 2));
-            yn = gs.piece.rotation[i].x;
-
-            gs.piece.rotation[i] = {xn, yn};
-            posn[i] = gs.piece.ulpt + gs.piece.rotation[i];
-
-            gs.blocks[WELL_BLOCK_WIDTH*(poso.y)+(poso.x)] = NULL;
-        }
-        for (int i = 0; i < 4; i++) {
-            gs.blocks[WELL_BLOCK_WIDTH*(posn[i].y)+(posn[i].x)] = gs.piece.blocks[i];
-        }
-        //TODO: check collisions/kicks
-        //if collide, rotate back
-    } else {
-        for (int i = 0; i < 4; i++){
-            poso = gs.piece.ulpt + gs.piece.rotation[i];
-
-            xn = gs.piece.rotation[i].y;
-            yn = 1 - (gs.piece.rotation[i].x - (me - 2));
-
-            gs.piece.rotation[i] = {xn, yn};
-            posn[i] = gs.piece.ulpt + gs.piece.rotation[i];
-
-            gs.blocks[WELL_BLOCK_WIDTH*(poso.y)+(poso.x)] = NULL;
-        }
-        for (int i = 0; i < 4; i++) {
-            gs.blocks[WELL_BLOCK_WIDTH*(posn[i].y)+(posn[i].x)] = gs.piece.blocks[i];
-        }
-        //check collisions/kicks
-        //if collide, rotate back
-    }
-}
-
 bool spawn_piece() { //https://xkcd.com/888/
+    std::cout << "SPAWNING!" << std::endl;
     bool success = true;
     // select piece using 7-in-a-Bag random generator
     // attempt to place piece at proper spawn point in well: if it collides, game over
@@ -611,6 +526,103 @@ bool spawn_piece() { //https://xkcd.com/888/
     return success;
 }
 
+void move_piece(Direction d) {
+    std::cout << "MOVING!" << std::endl;
+    //check for collisions with other pieces or the bottom
+    //if it hits the bottom, release to board
+    v2 new_ulpt;
+    v2 poso;
+    v2 posn[4];
+    v2 tmp;
+    bool new_piece = false;
+    switch (d) {
+        case LEFT: new_ulpt = gs.piece.ulpt + V2(-1,0); break;
+        case RIGHT: new_ulpt = gs.piece.ulpt + V2(1,0); break;
+        case DOWN: new_ulpt = gs.piece.ulpt + V2(0,1); break;
+        case HARD_DOWN: 
+        default:
+            break;
+    }
+    //check collisions at new position
+    //walls
+    //check for hitting bottom
+    for (int i = 0; i < 4; i++) {
+        tmp = new_ulpt + gs.piece.rotation[i];
+        // sides
+        if (tmp.x < 0 || tmp.x >= WELL_BLOCK_WIDTH) {
+            return;
+        }
+        if (tmp.y > 21) {
+            return;
+        }
+    }
+
+    //commit new position
+    for (int i = 0; i < 4; i++) {
+        poso = gs.piece.ulpt + gs.piece.rotation[i];
+        posn[i] = new_ulpt + gs.piece.rotation[i];
+        gs.blocks[WELL_BLOCK_WIDTH*(poso.y)+(poso.x)] = NULL;
+    }
+    for (int i = 0; i < 4; i++) {
+        gs.blocks[WELL_BLOCK_WIDTH*(posn[i].y)+(posn[i].x)] = gs.piece.blocks[i];
+        if (posn[i].y == 21) {
+            new_piece = true;
+        }
+    }
+	
+	gs.piece.ulpt = new_ulpt;
+
+    if (new_piece) {
+        release_piece();
+        spawn_piece();
+    }
+}
+
+void rotate_piece(bool reverse = false) {
+    std::cout << "ROTATING!" << std::endl;
+    int xn, yn, me;
+    v2 poso;
+    v2 posn[4];
+
+    me = max_ext[gs.piece.blocks[0]->color];
+    //reverse rotates to the left, otherwise right
+    if (!reverse) {
+        for (int i = 0; i < 4; i++) {
+            poso = gs.piece.ulpt + gs.piece.rotation[i];
+
+            xn = 1 - (gs.piece.rotation[i].y - (me - 2));
+            yn = gs.piece.rotation[i].x;
+
+            gs.piece.rotation[i] = {xn, yn};
+            posn[i] = gs.piece.ulpt + gs.piece.rotation[i];
+
+            gs.blocks[WELL_BLOCK_WIDTH*(poso.y)+(poso.x)] = NULL;
+        }
+        for (int i = 0; i < 4; i++) {
+            gs.blocks[WELL_BLOCK_WIDTH*(posn[i].y)+(posn[i].x)] = gs.piece.blocks[i];
+        }
+        //TODO: check collisions/kicks
+        //if collide, rotate back
+    } else {
+        for (int i = 0; i < 4; i++){
+            poso = gs.piece.ulpt + gs.piece.rotation[i];
+
+            xn = gs.piece.rotation[i].y;
+            yn = 1 - (gs.piece.rotation[i].x - (me - 2));
+
+            gs.piece.rotation[i] = {xn, yn};
+            posn[i] = gs.piece.ulpt + gs.piece.rotation[i];
+
+            gs.blocks[WELL_BLOCK_WIDTH*(poso.y)+(poso.x)] = NULL;
+        }
+        for (int i = 0; i < 4; i++) {
+            gs.blocks[WELL_BLOCK_WIDTH*(posn[i].y)+(posn[i].x)] = gs.piece.blocks[i];
+        }
+        //check collisions/kicks
+        //if collide, rotate back
+    }
+}
+
 int main(int argc, char **argv) {
     if (!init()) {
         std::cout << "Initialization Failed" << std::endl;
@@ -619,10 +631,12 @@ int main(int argc, char **argv) {
             std::cout << "Loading Failed" << std::endl;
         } else {
             bool quit = false;
+            bool fps_on = false;
             bool position_debug = false;
             bool collision_debug = false;
             int frame_count = 0;
             int delta_ticks = 0;
+            int cur_ticks = 0;
             float avgFPS = 0.0;
 
             //starting initialization
@@ -658,6 +672,23 @@ int main(int argc, char **argv) {
                             case SDLK_2:     
                                 collision_debug = !collision_debug; 
                                 break; 
+                            case SDLK_3:     
+                                fps_on = !fps_on; 
+                                break;
+                            case SDLK_8:
+                                switch (gs.state) {
+                                    case OVER:
+                                    case PAUSE:
+                                    case START:
+                                        gs.state = PLAY;
+                                        level_tick = block_step(gs.level);
+                                        piece_timer.start();
+                                        break;
+                                    case PLAY:
+                                        gs.state = START;
+                                        break;
+                                }
+                                break; 
                             case SDLK_9:
                                 move_piece(DOWN);
                                 break;
@@ -665,6 +696,18 @@ int main(int argc, char **argv) {
                                 release_piece();
                                 delete_blocks(); // be careful with this, can easily cause a seg fault
                                 spawn_piece();
+                                break;
+                            case SDLK_COMMA:
+                            case SDLK_LESS:
+                                gs.level -= 1;
+                                if (gs.level < 1) gs.level = 1;
+                                level_tick = block_step(gs.level);
+                                break;
+                            case SDLK_PERIOD:
+                            case SDLK_GREATER:
+                                gs.level += 1;
+                                if (gs.level > 15) gs.level = 15;
+                                level_tick = block_step(gs.level);
                                 break;
                             case SDLK_w:
                             case SDLK_UP:
@@ -689,21 +732,31 @@ int main(int argc, char **argv) {
                     }
                 }
 
-                // calculate and render FPS
-                avgFPS = frame_count / (fps_timer.get_ticks() / 1000.0);
-                if (avgFPS > 2000000) {
-                    avgFPS = 0;
+                if (gs.state == PLAY) {
+                    cur_ticks = piece_timer.get_ticks();
+                    if (cur_ticks >= level_tick) {
+                        move_piece(DOWN);
+                        piece_timer.start();
+                    }
                 }
-                fpsText.str("");
-                fpsText << "fps: " << avgFPS;
-                t_fps.load_from_rendered_text(fpsText.str(), RED_);
+
                 // Initialize renderer color (also used for clearing)
                 // SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, 0xFF); //white
                 SDL_SetRenderDrawColor(renderer, 0x0, 0x0, 0x0, 0xFF); //black
                 SDL_RenderClear(renderer);
                 render_well(position_debug);
                 render_status();
-                t_fps.render(SCREEN_WIDTH-t_fps.get_width(), 0);
+                if (fps_on) {
+                    // calculate and render FPS
+                    avgFPS = frame_count / (fps_timer.get_ticks() / 1000.0);
+                    if (avgFPS > 2000000) {
+                        avgFPS = 0;
+                    }
+                    fpsText.str("");
+                    fpsText << avgFPS << "fps";
+                    t_fps.load_from_rendered_text(fpsText.str(), RED_);
+                    t_fps.render(SCREEN_WIDTH-t_fps.get_width(), 0);
+                }
                 SDL_RenderPresent(renderer);
                 frame_count++;
 
