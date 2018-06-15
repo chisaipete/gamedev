@@ -9,7 +9,6 @@ Timer frame_timer;
 Timer fps_timer;
 Timer piece_timer;
 int level_tick;
-bool collision_debug;
 std::stringstream levelText;
 std::stringstream scoreText;
 std::stringstream linesText;
@@ -268,12 +267,18 @@ bool release_piece() {
     }
 }
 
-const unsigned NOHIT = 0b111;
-const unsigned WALLS = 0b001;
-const unsigned FLOOR = 0b010;
-const unsigned PIECE = 0b100;
-
-unsigned check_collisions(v2 new_position) {
+unsigned check_collisions(v2 new_position, v2* new_rotation) {
+    std::cout << "OLD: " << gs.piece.ulpt << " | ";
+    for (int i = 0; i < 4; i++) {
+        std::cout << gs.piece.rotation[i];
+    }
+    std::cout << std::endl;
+    std::cout << "NEW: " << new_position << " | ";
+    for (int i = 0; i < 4; i++) {
+        std::cout << new_rotation[i];
+    }
+    std::cout << std::endl;
+    // checks for all kinds of collisions for a given piece, requires a new position ulpt
     unsigned collision_mask = 0b000;
     // bool success = true;
     bool self;
@@ -282,15 +287,13 @@ unsigned check_collisions(v2 new_position) {
     //iterate through present position of piece
     //check against all possible collisions, if we collide, return false
     for (int i = 0; i < 4; i++) {
-        temp = new_position + gs.piece.rotation[i];
+        temp = new_position + new_rotation[i];
     //walls
         if (temp.x < 0 || temp.x >= WELL_BLOCK_WIDTH) {
-            // success = false;
             collision_mask |= WALLS;
         }
     //floor
         if (temp.y > 21) {
-            // success = false;
             collision_mask |= FLOOR;
         }
     //stationary pieces
@@ -305,13 +308,7 @@ unsigned check_collisions(v2 new_position) {
                 }
             }
             if (!self) {
-                if (collision_debug) {
-                    SDL_SetRenderDrawColor(renderer, 0x00, 0x00, 0xFF, 0xFF); //blue
-                    SDL_Rect quad = {(temp.x+2)*BLOCK_SIZE, (temp.y+1)*BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE};
-                    SDL_RenderFillRect(renderer, &quad);
-                }
                 collision_mask |= PIECE;
-                // success = false;
             }
         }
     }
@@ -576,8 +573,7 @@ bool spawn_piece() { //https://xkcd.com/888/
 }
 
 void move_piece(Direction d) {
-    //check for collisions with other pieces or the bottom
-    //if it hits the bottom, release to board
+// calculate new position
     v2 new_ulpt;
     v2 poso;
     v2 posn[4];
@@ -591,12 +587,12 @@ void move_piece(Direction d) {
         default:
             break;
     }
-    // check collisions at new position
+// check collisions at new position
     // using a collision bitmask to handle multiple types of collisions
-    unsigned collisions = check_collisions(new_ulpt);
+    unsigned collisions = check_collisions(new_ulpt, gs.piece.rotation);
 
+// commit new position
     if (!(collisions & NOHIT)) {
-        //commit new position
         for (int i = 0; i < 4; i++) {
             poso = gs.piece.ulpt + gs.piece.rotation[i];
             posn[i] = new_ulpt + gs.piece.rotation[i];
@@ -605,10 +601,10 @@ void move_piece(Direction d) {
         for (int i = 0; i < 4; i++) {
             gs.blocks[WELL_BLOCK_WIDTH*(posn[i].y)+(posn[i].x)] = gs.piece.blocks[i];
         }
-	
-	   gs.piece.ulpt = new_ulpt;
+       gs.piece.ulpt = new_ulpt;
     }
-
+// create a new piece if we're set
+    // TODO: check timing on this, may need to pass a flag to allow for a full level_tick before spawn
     if (collisions & FLOOR || collisions & PIECE) {
         release_piece();
         spawn_piece();
@@ -616,47 +612,42 @@ void move_piece(Direction d) {
 }
 
 void rotate_piece(bool reverse = false) {
+// calculate new position
     int xn, yn, me;
     v2 poso;
     v2 posn[4];
+    v2 new_rotation[4];
 
     me = max_ext[gs.piece.blocks[0]->color];
     //reverse rotates to the left, otherwise right
     if (!reverse) {
         for (int i = 0; i < 4; i++) {
-            poso = gs.piece.ulpt + gs.piece.rotation[i];
-
             xn = 1 - (gs.piece.rotation[i].y - (me - 2));
             yn = gs.piece.rotation[i].x;
-
-            gs.piece.rotation[i] = {xn, yn};
-            posn[i] = gs.piece.ulpt + gs.piece.rotation[i];
-
-            gs.blocks[WELL_BLOCK_WIDTH*(poso.y)+(poso.x)] = NULL;
+            new_rotation[i] = {xn, yn};
         }
-        for (int i = 0; i < 4; i++) {
-            gs.blocks[WELL_BLOCK_WIDTH*(posn[i].y)+(posn[i].x)] = gs.piece.blocks[i];
-        }
-        //check collisions/kicks
-        //if collide, rotate back
     } else {
         for (int i = 0; i < 4; i++){
-            poso = gs.piece.ulpt + gs.piece.rotation[i];
-
             xn = gs.piece.rotation[i].y;
             yn = 1 - (gs.piece.rotation[i].x - (me - 2));
+            new_rotation[i] = {xn, yn};
+        }
+    }
+// check collisions at new position
+    unsigned collisions = check_collisions(gs.piece.ulpt, new_rotation);
 
-            gs.piece.rotation[i] = {xn, yn};
-            posn[i] = gs.piece.ulpt + gs.piece.rotation[i];
-
+// commit new position
+    if (!(collisions & NOHIT)) {
+        for (int i = 0; i < 4; i++) {
+            poso = gs.piece.ulpt + gs.piece.rotation[i];
+            posn[i] = gs.piece.ulpt + new_rotation[i];
             gs.blocks[WELL_BLOCK_WIDTH*(poso.y)+(poso.x)] = NULL;
         }
         for (int i = 0; i < 4; i++) {
             gs.blocks[WELL_BLOCK_WIDTH*(posn[i].y)+(posn[i].x)] = gs.piece.blocks[i];
         }
-        //check collisions/kicks
-        //if collide, rotate back
     }
+    // TODO: Kicks?
 }
 
 int main(int argc, char **argv) {
@@ -669,7 +660,6 @@ int main(int argc, char **argv) {
             bool quit = false;
             bool fps_on = false;
             bool position_debug = false;
-            collision_debug = false;
             int frame_count = 0;
             int delta_ticks = 0;
             int cur_ticks = 0;
@@ -706,9 +696,6 @@ int main(int argc, char **argv) {
                                 position_debug = !position_debug; 
                                 break;
                             case SDLK_2:     
-                                collision_debug = !collision_debug; 
-                                break; 
-                            case SDLK_3:     
                                 fps_on = !fps_on; 
                                 break;
                             case SDLK_8:
@@ -768,15 +755,6 @@ int main(int argc, char **argv) {
                     }
                 }
 
-                // Initialize renderer color (also used for clearing)
-                // SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, 0xFF); //white
-                SDL_SetRenderDrawColor(renderer, 0x0, 0x0, 0x0, 0xFF); //black
-                if (collision_debug) 
-                    SDL_Delay(1000);
-                SDL_RenderClear(renderer);
-                render_well(position_debug);
-                render_status();
-
                 if (gs.state == PLAY) {
                     cur_ticks = piece_timer.get_ticks();
                     if (cur_ticks >= level_tick) {
@@ -785,6 +763,12 @@ int main(int argc, char **argv) {
                     }
                 }
 
+                // Initialize renderer color (also used for clearing)
+                // SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, 0xFF); //white
+                SDL_SetRenderDrawColor(renderer, 0x0, 0x0, 0x0, 0xFF); //black
+                SDL_RenderClear(renderer);
+                render_well(position_debug);
+                render_status();
                 if (fps_on) {
                     // calculate and render FPS
                     avgFPS = frame_count / (fps_timer.get_ticks() / 1000.0);

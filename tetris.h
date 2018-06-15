@@ -55,6 +55,14 @@ enum Piece       { I, J, L, O, S, T, Z };
 int max_ext[7] = { 4, 3, 3, 2, 3, 3, 3 };
 enum Direction {LEFT, RIGHT, DOWN, HARD_DOWN};
 
+
+// collision masks
+const unsigned NOHIT = 0b111;
+const unsigned WALLS = 0b001;
+const unsigned FLOOR = 0b010;
+const unsigned PIECE = 0b100;
+
+
 int block_step (int level) {
     float step_sec;
     step_sec = pow((0.8-((static_cast<float>(level)-1.0)*0.007)),(static_cast<float>(level)-1.0));
@@ -98,7 +106,7 @@ struct v2 {
 };
 
 std::ostream &operator<<(std::ostream &os, v2 const &A) { 
-    return os << A.x << "," << A.y;
+    return os << "(" << A.x << "," << A.y << ")";
 }
 
 // convert pair of ints to v2
