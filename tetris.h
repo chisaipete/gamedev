@@ -109,6 +109,12 @@ v2 V2(int A, int B) {
     return r;
 };
 
+bool operator==(v2 A, v2 B) {
+    if (A.x == B.x && A.y == B.y)
+        return true;
+    return false;
+};
+
 v2 operator-(v2 A) {
     v2 r;
     r.x = -A.x;
