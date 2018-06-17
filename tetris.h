@@ -17,7 +17,7 @@ const int SCREEN_FPS = 60;
 const int SCREEN_TICKS_PER_FRAME = 1000 / SCREEN_FPS;
 
 const int BLOCK_SIZE = 32;
-const int WELL_BLOCK_WIDTH = 10;
+const int WELL_BLOCK_WIDTH = 12; //two columns wider than displayed field (for left hand collision detection)
 const int WELL_BLOCK_HEIGHT = 22; // top two are "hidden"
 const int SCREEN_BLOCK_WIDTH = 14;
 const int SCREEN_BLOCK_HEIGHT = 25; // 
@@ -57,10 +57,11 @@ enum Direction {LEFT, RIGHT, DOWN, HARD_DOWN};
 
 
 // collision masks
-const unsigned NOHIT = 0b111;
-const unsigned WALLS = 0b001;
-const unsigned FLOOR = 0b010;
-const unsigned PIECE = 0b100;
+const unsigned NOHIT = 0b0111;
+const unsigned WALLS = 0b0001;
+const unsigned FLOOR = 0b0010;
+const unsigned PIECE = 0b0100;
+const unsigned PSELF = 0b1000;
 
 
 int block_step (int level) {
@@ -181,8 +182,10 @@ struct GameState {
     int level;
     int score;
     int lines;
+    bool new_piece;
     Tetrimino piece;
-    Block* blocks[WELL_BLOCK_WIDTH*WELL_BLOCK_HEIGHT];
+    Block* blocks[(WELL_BLOCK_WIDTH)*WELL_BLOCK_HEIGHT];
+    //adding a two space buffer to be null to help with detecting drops on edges
 };
 
 /*

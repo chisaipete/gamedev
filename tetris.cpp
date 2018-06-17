@@ -208,6 +208,13 @@ void render_status() {
     t_lines.load_from_rendered_text(linesText.str());
     t_lines.render(SCREEN_WIDTH-(BLOCK_SIZE/2)-t_lines.get_width(), SCREEN_HEIGHT-(BLOCK_SIZE/2));
     // t_lines.render(0, 0);
+
+    if (gs.state == OVER) {
+        statusText.str("");
+        statusText << "G A M E  O V E R";
+        t_status.load_from_rendered_text(statusText.str());
+        t_status.render((SCREEN_WIDTH/2)-(t_status.get_width()/2), SCREEN_HEIGHT/2);
+    }
 }
 
 void render_well(bool debug = false) {
@@ -215,12 +222,12 @@ void render_well(bool debug = false) {
     for (int x = 0; x < WELL_BLOCK_WIDTH; x++) {
         for (int y = 0; y < WELL_BLOCK_HEIGHT; y++) {
             if (gs.blocks[WELL_BLOCK_WIDTH*y+x] != NULL) {
-                tilemap.render((x+2)*BLOCK_SIZE, (y+1)*BLOCK_SIZE, &sprites[gs.blocks[WELL_BLOCK_WIDTH*y+x]->color]);
+                tilemap.render((x)*BLOCK_SIZE, (y+1)*BLOCK_SIZE, &sprites[gs.blocks[WELL_BLOCK_WIDTH*y+x]->color]);
 
-            } //TODO: make sure render offsets match the blocks array
+            }
             if (debug) {
                 SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, 0xFF); //white
-                SDL_Rect quad = {(x+2)*BLOCK_SIZE, (y+1)*BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE};
+                SDL_Rect quad = {(x)*BLOCK_SIZE, (y+1)*BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE};
                 SDL_RenderDrawRect(renderer, &quad);
                 SDL_SetRenderDrawColor(renderer, 0x0, 0x0, 0x0, 0xFF); //black    
             }
@@ -267,29 +274,29 @@ bool release_piece() {
     }
 }
 
+void delete_piece() {
+    for (int i = 0; i < 4; i++) {
+        delete gs.piece.blocks[i];
+        gs.piece.blocks[i] = NULL;
+    }
+}
+
 unsigned check_collisions(v2 new_position, v2* new_rotation) {
-    std::cout << "OLD: " << gs.piece.ulpt << " | ";
-    for (int i = 0; i < 4; i++) {
-        std::cout << gs.piece.rotation[i];
+    if (gs.piece.blocks[0] == NULL) {
+        return 32;
     }
-    std::cout << std::endl;
-    std::cout << "NEW: " << new_position << " | ";
-    for (int i = 0; i < 4; i++) {
-        std::cout << new_rotation[i];
-    }
-    std::cout << std::endl;
     // checks for all kinds of collisions for a given piece, requires a new position ulpt
     unsigned collision_mask = 0b000;
     // bool success = true;
-    bool self;
-    v2 temp;
-    v2 old;
+    bool self = false;
+    v2 temp = {0,0};
+    v2 old = {0,0};
     //iterate through present position of piece
     //check against all possible collisions, if we collide, return false
     for (int i = 0; i < 4; i++) {
         temp = new_position + new_rotation[i];
     //walls
-        if (temp.x < 0 || temp.x >= WELL_BLOCK_WIDTH) {
+        if (temp.x < 2 || temp.x >= WELL_BLOCK_WIDTH) {
             collision_mask |= WALLS;
         }
     //floor
@@ -297,301 +304,273 @@ unsigned check_collisions(v2 new_position, v2* new_rotation) {
             collision_mask |= FLOOR;
         }
     //stationary pieces
-        //if we hit a piece               
-        if (gs.blocks[WELL_BLOCK_WIDTH*(temp.y)+(temp.x)] != NULL) {
-            //if it's not one of the other tiles' old positions
-            self = false;
-            for(int i = 0; i < 4; i++) {
-                old = gs.piece.ulpt + gs.piece.rotation[i];
-                if (old == temp) {
-                    self = true;
+        //if we hit a piece            
+        if (temp.x > 0) {
+            if (gs.blocks[WELL_BLOCK_WIDTH*(temp.y)+(temp.x)] != NULL) {
+                //if it's not one of the other tiles' old positions
+                self = false;
+                for(int i = 0; i < 4; i++) {
+                    old = gs.piece.ulpt + gs.piece.rotation[i];
+                    if (old == temp) {
+                        self = true;
+                    }
                 }
-            }
-            if (!self) {
-                collision_mask |= PIECE;
+                if (!self) {
+                    collision_mask |= PIECE;
+                } else {
+                    collision_mask |= PSELF;
+                }
             }
         }
     }
+
     return collision_mask;
+}
+
+v2 get_ghost_position() {
+    // based on present position, check for the lowest point the current piece can go, and return a new ulpt
+    // this originally went outside the bounds of the board, so I widened the board with 2 unused columns
+    // to get around the issue of uninitialized area on the edge of the array for our rotation scheme 
+    v2 lowest_ulpt = gs.piece.ulpt;
+    unsigned collisions = check_collisions(lowest_ulpt, gs.piece.rotation);
+    while (!(collisions & NOHIT)) {
+        lowest_ulpt = lowest_ulpt + V2(0,1);
+        collisions = check_collisions(lowest_ulpt, gs.piece.rotation);
+    }
+    return lowest_ulpt + V2(0, -1);
 }
 
 bool spawn_piece() { //https://xkcd.com/888/
     bool success = true;
     // select piece using 7-in-a-Bag random generator
     // attempt to place piece at proper spawn point in well: if it collides, game over
-    //TODO: correct collision detection
     Piece p = seven_bag.draw_piece();
-    v2 pos;
+    unsigned collisions = 0b000;
+    v2 pos[4];
     switch (p) {
         case I:
-            gs.piece.ulpt = {3,0};
-            // TODO: checking collision for all blocks
-            if (gs.blocks[WELL_BLOCK_WIDTH*(gs.piece.ulpt.y+1)+(gs.piece.ulpt.x+1)] == NULL) {
-                // allocating block
-                for (int i = 0; i < 4; i++) {
-                    gs.piece.blocks[i] = new Block;
-                    gs.piece.blocks[i]->color = I;
-                    switch (i) {
-                        case 0:
-                            gs.piece.rotation[i] = {0,1};
-                            pos = gs.piece.ulpt + gs.piece.rotation[i];
-                            gs.blocks[WELL_BLOCK_WIDTH*(pos.y)+(pos.x)] = gs.piece.blocks[i];
-                            break;
-                        case 1:
-                            gs.piece.rotation[i] = {1,1};
-                            pos = gs.piece.ulpt + gs.piece.rotation[i];
-                            gs.blocks[WELL_BLOCK_WIDTH*(pos.y)+(pos.x)] = gs.piece.blocks[i];
-                            break;
-                        case 2:
-                            gs.piece.rotation[i] = {2,1};
-                            pos = gs.piece.ulpt + gs.piece.rotation[i];
-                            gs.blocks[WELL_BLOCK_WIDTH*(pos.y)+(pos.x)] = gs.piece.blocks[i];
-                            break;
-                        case 3:
-                            gs.piece.rotation[i] = {3,1};
-                            pos = gs.piece.ulpt + gs.piece.rotation[i];
-                            gs.blocks[WELL_BLOCK_WIDTH*(pos.y)+(pos.x)] = gs.piece.blocks[i];
-                            break;
-                    }
+            gs.piece.ulpt = {5,0};
+            // allocating block
+            for (int i = 0; i < 4; i++) {
+                gs.piece.blocks[i] = new Block;
+                gs.piece.blocks[i]->color = I;
+                switch (i) {
+                    case 0:
+                        gs.piece.rotation[i] = {0,1};
+                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        break;
+                    case 1:
+                        gs.piece.rotation[i] = {1,1};
+                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        break;
+                    case 2:
+                        gs.piece.rotation[i] = {2,1};
+                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        break;
+                    case 3:
+                        gs.piece.rotation[i] = {3,1};
+                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        break;
                 }
-            } else {
-                success = false;
             }
             break;
         case J:
-           gs.piece.ulpt = {3,0};
-            // checking collision
-            if (gs.blocks[WELL_BLOCK_WIDTH*(gs.piece.ulpt.y+1)+(gs.piece.ulpt.x+1)] == NULL) {
-                // allocating block
-                for (int i = 0; i < 4; i++) {
-                    gs.piece.blocks[i] = new Block;
-                    gs.piece.blocks[i]->color = J;
-                    switch (i) {
-                        case 0:
-                            gs.piece.rotation[i] = {0,0};
-                            pos = gs.piece.ulpt + gs.piece.rotation[i];
-                            gs.blocks[WELL_BLOCK_WIDTH*(pos.y)+(pos.x)] = gs.piece.blocks[i];
-                            break;
-                        case 1:
-                            gs.piece.rotation[i] = {0,1};
-                            pos = gs.piece.ulpt + gs.piece.rotation[i];
-                            gs.blocks[WELL_BLOCK_WIDTH*(pos.y)+(pos.x)] = gs.piece.blocks[i];
-                            break;
-                        case 2:
-                            gs.piece.rotation[i] = {1,1};
-                            pos = gs.piece.ulpt + gs.piece.rotation[i];
-                            gs.blocks[WELL_BLOCK_WIDTH*(pos.y)+(pos.x)] = gs.piece.blocks[i];
-                            break;
-                        case 3:
-                            gs.piece.rotation[i] = {2,1};
-                            pos = gs.piece.ulpt + gs.piece.rotation[i];
-                            gs.blocks[WELL_BLOCK_WIDTH*(pos.y)+(pos.x)] = gs.piece.blocks[i];
-                            break;
-                    }
+            gs.piece.ulpt = {5,0};
+            // allocating block
+            for (int i = 0; i < 4; i++) {
+                gs.piece.blocks[i] = new Block;
+                gs.piece.blocks[i]->color = J;
+                switch (i) {
+                    case 0:
+                        gs.piece.rotation[i] = {0,0};
+                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        break;
+                    case 1:
+                        gs.piece.rotation[i] = {0,1};
+                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        break;
+                    case 2:
+                        gs.piece.rotation[i] = {1,1};
+                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        break;
+                    case 3:
+                        gs.piece.rotation[i] = {2,1};
+                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        break;
                 }
-            } else {
-                success = false;
             }
             break;
         case L:
-           gs.piece.ulpt = {3,0};
-            // checking collision
-            if (gs.blocks[WELL_BLOCK_WIDTH*(gs.piece.ulpt.y+1)+(gs.piece.ulpt.x+1)] == NULL) {
-                // allocating block
-                for (int i = 0; i < 4; i++) {
-                    gs.piece.blocks[i] = new Block;
-                    gs.piece.blocks[i]->color = L;
-                    switch (i) {
-                        case 0:
-                            gs.piece.rotation[i] = {0,1};
-                            pos = gs.piece.ulpt + gs.piece.rotation[i];
-                            gs.blocks[WELL_BLOCK_WIDTH*(pos.y)+(pos.x)] = gs.piece.blocks[i];
-                            break;
-                        case 1:
-                            gs.piece.rotation[i] = {1,1};
-                            pos = gs.piece.ulpt + gs.piece.rotation[i];
-                            gs.blocks[WELL_BLOCK_WIDTH*(pos.y)+(pos.x)] = gs.piece.blocks[i];
-                            break;
-                        case 2:
-                            gs.piece.rotation[i] = {2,1};
-                            pos = gs.piece.ulpt + gs.piece.rotation[i];
-                            gs.blocks[WELL_BLOCK_WIDTH*(pos.y)+(pos.x)] = gs.piece.blocks[i];
-                            break;
-                        case 3:
-                            gs.piece.rotation[i] = {2,0};
-                            pos = gs.piece.ulpt + gs.piece.rotation[i];
-                            gs.blocks[WELL_BLOCK_WIDTH*(pos.y)+(pos.x)] = gs.piece.blocks[i];
-                            break;
-                    }
+            gs.piece.ulpt = {5,0};
+            // allocating block
+            for (int i = 0; i < 4; i++) {
+                gs.piece.blocks[i] = new Block;
+                gs.piece.blocks[i]->color = L;
+                switch (i) {
+                    case 0:
+                        gs.piece.rotation[i] = {0,1};
+                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        break;
+                    case 1:
+                        gs.piece.rotation[i] = {1,1};
+                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        break;
+                    case 2:
+                        gs.piece.rotation[i] = {2,1};
+                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        break;
+                    case 3:
+                        gs.piece.rotation[i] = {2,0};
+                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        break;
                 }
-            } else {
-                success = false;
             }
             break;
         case O:
-           gs.piece.ulpt = {4,0};
-            // checking collision
-            if (gs.blocks[WELL_BLOCK_WIDTH*(gs.piece.ulpt.y+1)+(gs.piece.ulpt.x+1)] == NULL) {
-                // allocating block
-                for (int i = 0; i < 4; i++) {
-                    gs.piece.blocks[i] = new Block;
-                    gs.piece.blocks[i]->color = O;
-                    switch (i) {
-                        case 0:
-                            gs.piece.rotation[i] = {0,0};
-                            pos = gs.piece.ulpt + gs.piece.rotation[i];
-                            gs.blocks[WELL_BLOCK_WIDTH*(pos.y)+(pos.x)] = gs.piece.blocks[i];
-                            break;
-                        case 1:
-                            gs.piece.rotation[i] = {1,0};
-                            pos = gs.piece.ulpt + gs.piece.rotation[i];
-                            gs.blocks[WELL_BLOCK_WIDTH*(pos.y)+(pos.x)] = gs.piece.blocks[i];
-                            break;
-                        case 2:
-                            gs.piece.rotation[i] = {0,1};
-                            pos = gs.piece.ulpt + gs.piece.rotation[i];
-                            gs.blocks[WELL_BLOCK_WIDTH*(pos.y)+(pos.x)] = gs.piece.blocks[i];
-                            break;
-                        case 3:
-                            gs.piece.rotation[i] = {1,1};
-                            pos = gs.piece.ulpt + gs.piece.rotation[i];
-                            gs.blocks[WELL_BLOCK_WIDTH*(pos.y)+(pos.x)] = gs.piece.blocks[i];
-                            break;
-                    }
+            gs.piece.ulpt = {6,0};
+            // allocating block
+            for (int i = 0; i < 4; i++) {
+                gs.piece.blocks[i] = new Block;
+                gs.piece.blocks[i]->color = O;
+                switch (i) {
+                    case 0:
+                        gs.piece.rotation[i] = {0,0};
+                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        break;
+                    case 1:
+                        gs.piece.rotation[i] = {1,0};
+                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        break;
+                    case 2:
+                        gs.piece.rotation[i] = {0,1};
+                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        break;
+                    case 3:
+                        gs.piece.rotation[i] = {1,1};
+                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        break;
                 }
-            } else {
-                success = false;
             }
             break;
         case S:
-           gs.piece.ulpt = {3,0};
-            // checking collision
-            if (gs.blocks[WELL_BLOCK_WIDTH*(gs.piece.ulpt.y+1)+(gs.piece.ulpt.x+1)] == NULL) {
-                // allocating block
-                for (int i = 0; i < 4; i++) {
-                    gs.piece.blocks[i] = new Block;
-                    gs.piece.blocks[i]->color = S;
-                    switch (i) {
-                        case 0:
-                            gs.piece.rotation[i] = {0,1};
-                            pos = gs.piece.ulpt + gs.piece.rotation[i];
-                            gs.blocks[WELL_BLOCK_WIDTH*(pos.y)+(pos.x)] = gs.piece.blocks[i];
-                            break;
-                        case 1:
-                            gs.piece.rotation[i] = {1,0};
-                            pos = gs.piece.ulpt + gs.piece.rotation[i];
-                            gs.blocks[WELL_BLOCK_WIDTH*(pos.y)+(pos.x)] = gs.piece.blocks[i];
-                            break;
-                        case 2:
-                            gs.piece.rotation[i] = {1,1};
-                            pos = gs.piece.ulpt + gs.piece.rotation[i];
-                            gs.blocks[WELL_BLOCK_WIDTH*(pos.y)+(pos.x)] = gs.piece.blocks[i];
-                            break;
-                        case 3:
-                            gs.piece.rotation[i] = {2,0};
-                            pos = gs.piece.ulpt + gs.piece.rotation[i];
-                            gs.blocks[WELL_BLOCK_WIDTH*(pos.y)+(pos.x)] = gs.piece.blocks[i];
-                            break;
-                    }
+            gs.piece.ulpt = {5,0};
+            // allocating block
+            for (int i = 0; i < 4; i++) {
+                gs.piece.blocks[i] = new Block;
+                gs.piece.blocks[i]->color = S;
+                switch (i) {
+                    case 0:
+                        gs.piece.rotation[i] = {0,1};
+                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        break;
+                    case 1:
+                        gs.piece.rotation[i] = {1,0};
+                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        break;
+                    case 2:
+                        gs.piece.rotation[i] = {1,1};
+                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        break;
+                    case 3:
+                        gs.piece.rotation[i] = {2,0};
+                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        break;
                 }
-            } else {
-                success = false;
             }
             break;
         case T:
-           gs.piece.ulpt = {3,0};
-            // checking collision
-            if (gs.blocks[WELL_BLOCK_WIDTH*(gs.piece.ulpt.y+1)+(gs.piece.ulpt.x+1)] == NULL) {
-                // allocating block
-                for (int i = 0; i < 4; i++) {
-                    gs.piece.blocks[i] = new Block;
-                    gs.piece.blocks[i]->color = T;
-                    switch (i) {
-                        case 0:
-                            gs.piece.rotation[i] = {1,0};
-                            pos = gs.piece.ulpt + gs.piece.rotation[i];
-                            gs.blocks[WELL_BLOCK_WIDTH*(pos.y)+(pos.x)] = gs.piece.blocks[i];
-                            break;
-                        case 1:
-                            gs.piece.rotation[i] = {0,1};
-                            pos = gs.piece.ulpt + gs.piece.rotation[i];
-                            gs.blocks[WELL_BLOCK_WIDTH*(pos.y)+(pos.x)] = gs.piece.blocks[i];
-                            break;
-                        case 2:
-                            gs.piece.rotation[i] = {1,1};
-                            pos = gs.piece.ulpt + gs.piece.rotation[i];
-                            gs.blocks[WELL_BLOCK_WIDTH*(pos.y)+(pos.x)] = gs.piece.blocks[i];
-                            break;
-                        case 3:
-                            gs.piece.rotation[i] = {2,1};
-                            pos = gs.piece.ulpt + gs.piece.rotation[i];
-                            gs.blocks[WELL_BLOCK_WIDTH*(pos.y)+(pos.x)] = gs.piece.blocks[i];
-                            break;
-                    }
+            gs.piece.ulpt = {5,0};
+            // allocating block
+            for (int i = 0; i < 4; i++) {
+                gs.piece.blocks[i] = new Block;
+                gs.piece.blocks[i]->color = T;
+                switch (i) {
+                    case 0:
+                        gs.piece.rotation[i] = {1,0};
+                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        break;
+                    case 1:
+                        gs.piece.rotation[i] = {0,1};
+                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        break;
+                    case 2:
+                        gs.piece.rotation[i] = {1,1};
+                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        break;
+                    case 3:
+                        gs.piece.rotation[i] = {2,1};
+                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        break;
                 }
-            } else {
-                success = false;
             }
             break;
         case Z:
-           gs.piece.ulpt = {3,0};
-            // checking collision
-            if (gs.blocks[WELL_BLOCK_WIDTH*(gs.piece.ulpt.y+1)+(gs.piece.ulpt.x+1)] == NULL) {
-                // allocating block
-                for (int i = 0; i < 4; i++) {
-                    gs.piece.blocks[i] = new Block;
-                    gs.piece.blocks[i]->color = Z;
-                    switch (i) {
-                        case 0:
-                            gs.piece.rotation[i] = {0,0};
-                            pos = gs.piece.ulpt + gs.piece.rotation[i];
-                            gs.blocks[WELL_BLOCK_WIDTH*(pos.y)+(pos.x)] = gs.piece.blocks[i];
-                            break;
-                        case 1:
-                            gs.piece.rotation[i] = {1,0};
-                            pos = gs.piece.ulpt + gs.piece.rotation[i];
-                            gs.blocks[WELL_BLOCK_WIDTH*(pos.y)+(pos.x)] = gs.piece.blocks[i];
-                            break;
-                        case 2:
-                            gs.piece.rotation[i] = {1,1};
-                            pos = gs.piece.ulpt + gs.piece.rotation[i];
-                            gs.blocks[WELL_BLOCK_WIDTH*(pos.y)+(pos.x)] = gs.piece.blocks[i];
-                            break;
-                        case 3:
-                            gs.piece.rotation[i] = {2,1};
-                            pos = gs.piece.ulpt + gs.piece.rotation[i];
-                            gs.blocks[WELL_BLOCK_WIDTH*(pos.y)+(pos.x)] = gs.piece.blocks[i];
-                            break;
-                    }
+           gs.piece.ulpt = {5,0};
+            // allocating block
+            for (int i = 0; i < 4; i++) {
+                gs.piece.blocks[i] = new Block;
+                gs.piece.blocks[i]->color = Z;
+                switch (i) {
+                    case 0:
+                        gs.piece.rotation[i] = {0,0};
+                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        break;
+                    case 1:
+                        gs.piece.rotation[i] = {1,0};
+                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        break;
+                    case 2:
+                        gs.piece.rotation[i] = {1,1};
+                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        break;
+                    case 3:
+                        gs.piece.rotation[i] = {2,1};
+                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        break;
                 }
-            } else {
-                success = false;
             }
             break;
     }
+    // TODO: correct this, will spawn infinitely once stack has reached the top
+    //check for collisions with existing blocks, if so, destroy block and return false, indicating game over
+    collisions = check_collisions(gs.piece.ulpt, gs.piece.rotation);
+    if (collisions & PSELF) {
+        gs.piece.ulpt = {0,0};
+        delete_piece();
+        success = false;
+    } else {
+        // commit piece
+        for (int i = 0; i < 4; i++) {
+            gs.blocks[WELL_BLOCK_WIDTH*(pos[i].y)+(pos[i].x)] = gs.piece.blocks[i];        
+        }
+    }
+
     return success;
 }
 
 void move_piece(Direction d) {
-// calculate new position
+    if (gs.piece.blocks[0] == NULL) {
+        return;
+    }
+    // calculate new position
     v2 new_ulpt;
     v2 poso;
     v2 posn[4];
     v2 tmp;
-    bool new_piece = false;
     switch (d) {
         case LEFT: new_ulpt = gs.piece.ulpt + V2(-1,0); break;
         case RIGHT: new_ulpt = gs.piece.ulpt + V2(1,0); break;
         case DOWN: new_ulpt = gs.piece.ulpt + V2(0,1); break;
-        case HARD_DOWN: 
+        case HARD_DOWN:
+            new_ulpt = get_ghost_position();
         default:
             break;
     }
-// check collisions at new position
+    // check collisions at new position
     // using a collision bitmask to handle multiple types of collisions
     unsigned collisions = check_collisions(new_ulpt, gs.piece.rotation);
 
-// commit new position
+    // commit new position
     if (!(collisions & NOHIT)) {
         for (int i = 0; i < 4; i++) {
             poso = gs.piece.ulpt + gs.piece.rotation[i];
@@ -603,16 +582,21 @@ void move_piece(Direction d) {
         }
        gs.piece.ulpt = new_ulpt;
     }
-// create a new piece if we're set
+    // create a new piece if we're set
     // TODO: check timing on this, may need to pass a flag to allow for a full level_tick before spawn
     if (collisions & FLOOR || collisions & PIECE) {
-        release_piece();
-        spawn_piece();
+        if (d == DOWN) {
+            gs.new_piece = true;
+        }
     }
+    // get_ghost_position();
 }
 
 void rotate_piece(bool reverse = false) {
-// calculate new position
+    if (gs.piece.blocks[0] == NULL) {
+        return;
+    }
+    // calculate new position
     int xn, yn, me;
     v2 poso;
     v2 posn[4];
@@ -633,14 +617,15 @@ void rotate_piece(bool reverse = false) {
             new_rotation[i] = {xn, yn};
         }
     }
-// check collisions at new position
+    // check collisions at new position
     unsigned collisions = check_collisions(gs.piece.ulpt, new_rotation);
 
-// commit new position
+    // commit new position
     if (!(collisions & NOHIT)) {
         for (int i = 0; i < 4; i++) {
             poso = gs.piece.ulpt + gs.piece.rotation[i];
             posn[i] = gs.piece.ulpt + new_rotation[i];
+            gs.piece.rotation[i] = new_rotation[i];
             gs.blocks[WELL_BLOCK_WIDTH*(poso.y)+(poso.x)] = NULL;
         }
         for (int i = 0; i < 4; i++) {
@@ -660,6 +645,7 @@ int main(int argc, char **argv) {
             bool quit = false;
             bool fps_on = false;
             bool position_debug = false;
+            bool spawn_success = false;
             int frame_count = 0;
             int delta_ticks = 0;
             int cur_ticks = 0;
@@ -670,12 +656,18 @@ int main(int argc, char **argv) {
             gs.level = 0;
             gs.score = 0;
             gs.lines = 0;
+            gs.new_piece = false;
+            gs.piece.ulpt = {0,0};
+            for (int i = 0; i < 4; i++) {
+                gs.piece.blocks[i] = NULL;
+                gs.piece.rotation[i] = {0,0};
+            }
             for (int x = 0; x < WELL_BLOCK_WIDTH; x++) {
                 for (int y = 0; y < WELL_BLOCK_HEIGHT; y++) {
                     gs.blocks[WELL_BLOCK_WIDTH*y+x] = NULL;
                 }
             }
-            spawn_piece();
+            // spawn_piece();
 
             fps_timer.start();
 
@@ -718,7 +710,7 @@ int main(int argc, char **argv) {
                             case SDLK_0:
                                 release_piece();
                                 delete_blocks(); // be careful with this, can easily cause a seg fault
-                                spawn_piece();
+                                spawn_success = spawn_piece();
                                 break;
                             case SDLK_COMMA:
                             case SDLK_LESS:
@@ -749,7 +741,7 @@ int main(int argc, char **argv) {
                                 move_piece(RIGHT);
                                 break;
                             case SDLK_SPACE:
-                                // move_piece(HARD_DOWN);
+                                move_piece(HARD_DOWN);
                                 break;
                         }
                     }
@@ -758,8 +750,19 @@ int main(int argc, char **argv) {
                 if (gs.state == PLAY) {
                     cur_ticks = piece_timer.get_ticks();
                     if (cur_ticks >= level_tick) {
-                        move_piece(DOWN);
+                        if (gs.new_piece) {
+                            release_piece();
+                            spawn_success = spawn_piece();
+                            gs.new_piece = !gs.new_piece;
+                        } else {
+                            move_piece(DOWN);
+                        }
                         piece_timer.start();
+                    }
+                    if (!spawn_success && gs.state == PLAY) {
+                        // std::cout << "GAME OVER" << std::endl;
+                        gs.state = OVER;
+                        piece_timer.stop();
                     }
                 }
 
