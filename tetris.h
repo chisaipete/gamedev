@@ -53,15 +53,20 @@ const int RED    = 6; // Z
 
 enum Piece       { I, J, L, O, S, T, Z };
 int max_ext[7] = { 4, 3, 3, 2, 3, 3, 3 };
-enum Direction {LEFT, RIGHT, DOWN, HARD_DOWN};
+enum Direction {LEFT, RIGHT, DOWN, HARD_DOWN, UP};
 
 
 // collision masks
-const unsigned NOHIT = 0b0111;
-const unsigned WALLS = 0b0001;
-const unsigned FLOOR = 0b0010;
-const unsigned PIECE = 0b0100;
-const unsigned PSELF = 0b1000;
+const unsigned NOHIT = 0b0000000111;
+const unsigned WALLS = 0b0000000001;
+const unsigned FLOOR = 0b0000000010;
+const unsigned PIECE = 0b0000000100;
+const unsigned PSELF = 0b0000001000;
+const unsigned LWALL = 0b0000010000;
+const unsigned RWALL = 0b0001000000;
+const unsigned RPICE = 0b0010000000;
+const unsigned LPICE = 0b0100000000;
+const unsigned FPICE = 0b1000000000;
 
 
 int block_step (int level) {

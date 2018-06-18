@@ -21,6 +21,10 @@ Texture t_status;
 Texture t_fps;
 Bag seven_bag;
 
+v2 get_deepest_position();
+unsigned check_collisions(v2 new_position, v2* new_rotation);
+
+
 bool init() {
     bool success = true;
 
@@ -218,6 +222,24 @@ void render_status() {
 }
 
 void render_well(bool debug = false) {
+    if (gs.piece.blocks[0] != NULL) {
+        // ghost
+        v2 ulpt = get_deepest_position() + V2(0,1);
+        tilemap.set_alpha(128);
+        v2 pos;
+        for (int i = 0; i < 4; i++) {
+            pos = ulpt + gs.piece.rotation[i];
+            tilemap.render((pos.x)*BLOCK_SIZE, (pos.y)*BLOCK_SIZE, &sprites[gs.piece.blocks[0]->color]);
+        }
+        tilemap.set_alpha(255);
+        // piece 
+        if (gs.piece.blocks[0] != NULL) {
+            for (int i = 0; i < 4; i++) {
+                pos = gs.piece.ulpt + V2(0,1) + gs.piece.rotation[i];
+                tilemap.render((pos.x)*BLOCK_SIZE, (pos.y)*BLOCK_SIZE, &sprites[gs.piece.blocks[0]->color]);
+            }
+        }
+    }
     //blocks
     for (int x = 0; x < WELL_BLOCK_WIDTH; x++) {
         for (int y = 0; y < WELL_BLOCK_HEIGHT; y++) {
@@ -269,7 +291,10 @@ void render_well(bool debug = false) {
 }
 
 bool release_piece() {
+    v2 pos;
     for (int i = 0; i < 4; i++) {
+        pos = gs.piece.ulpt + gs.piece.rotation[i];
+        gs.blocks[WELL_BLOCK_WIDTH*(pos.y)+(pos.x)] = gs.piece.blocks[i];      
         gs.piece.blocks[i] = NULL;
     }
 }
@@ -298,6 +323,11 @@ unsigned check_collisions(v2 new_position, v2* new_rotation) {
     //walls
         if (temp.x < 2 || temp.x >= WELL_BLOCK_WIDTH) {
             collision_mask |= WALLS;
+            if (temp.x < 2) {
+                collision_mask |= LWALL;
+            } else if (temp.x >= WELL_BLOCK_WIDTH) {
+                collision_mask |= RWALL;
+            }
         }
     //floor
         if (temp.y > 21) {
@@ -317,6 +347,15 @@ unsigned check_collisions(v2 new_position, v2* new_rotation) {
                 }
                 if (!self) {
                     collision_mask |= PIECE;
+                    if (old.x < temp.x) {
+                        collision_mask |= RPICE;
+                    }
+                    if (old.x > temp.x) {
+                        collision_mask |= LPICE;
+                    }
+                    if (old.y > temp.y) {
+                        collision_mask |= FPICE;
+                    }
                 } else {
                     collision_mask |= PSELF;
                 }
@@ -327,7 +366,7 @@ unsigned check_collisions(v2 new_position, v2* new_rotation) {
     return collision_mask;
 }
 
-v2 get_ghost_position() {
+v2 get_deepest_position() {
     // based on present position, check for the lowest point the current piece can go, and return a new ulpt
     // this originally went outside the bounds of the board, so I widened the board with 2 unused columns
     // to get around the issue of uninitialized area on the edge of the array for our rotation scheme 
@@ -357,19 +396,19 @@ bool spawn_piece() { //https://xkcd.com/888/
                 switch (i) {
                     case 0:
                         gs.piece.rotation[i] = {0,1};
-                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
                         break;
                     case 1:
                         gs.piece.rotation[i] = {1,1};
-                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
                         break;
                     case 2:
                         gs.piece.rotation[i] = {2,1};
-                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
                         break;
                     case 3:
                         gs.piece.rotation[i] = {3,1};
-                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
                         break;
                 }
             }
@@ -383,19 +422,19 @@ bool spawn_piece() { //https://xkcd.com/888/
                 switch (i) {
                     case 0:
                         gs.piece.rotation[i] = {0,0};
-                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
                         break;
                     case 1:
                         gs.piece.rotation[i] = {0,1};
-                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
                         break;
                     case 2:
                         gs.piece.rotation[i] = {1,1};
-                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
                         break;
                     case 3:
                         gs.piece.rotation[i] = {2,1};
-                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
                         break;
                 }
             }
@@ -409,19 +448,19 @@ bool spawn_piece() { //https://xkcd.com/888/
                 switch (i) {
                     case 0:
                         gs.piece.rotation[i] = {0,1};
-                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
                         break;
                     case 1:
                         gs.piece.rotation[i] = {1,1};
-                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
                         break;
                     case 2:
                         gs.piece.rotation[i] = {2,1};
-                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
                         break;
                     case 3:
                         gs.piece.rotation[i] = {2,0};
-                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
                         break;
                 }
             }
@@ -435,19 +474,19 @@ bool spawn_piece() { //https://xkcd.com/888/
                 switch (i) {
                     case 0:
                         gs.piece.rotation[i] = {0,0};
-                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
                         break;
                     case 1:
                         gs.piece.rotation[i] = {1,0};
-                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
                         break;
                     case 2:
                         gs.piece.rotation[i] = {0,1};
-                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
                         break;
                     case 3:
                         gs.piece.rotation[i] = {1,1};
-                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
                         break;
                 }
             }
@@ -461,19 +500,19 @@ bool spawn_piece() { //https://xkcd.com/888/
                 switch (i) {
                     case 0:
                         gs.piece.rotation[i] = {0,1};
-                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
                         break;
                     case 1:
                         gs.piece.rotation[i] = {1,0};
-                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
                         break;
                     case 2:
                         gs.piece.rotation[i] = {1,1};
-                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
                         break;
                     case 3:
                         gs.piece.rotation[i] = {2,0};
-                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
                         break;
                 }
             }
@@ -487,19 +526,19 @@ bool spawn_piece() { //https://xkcd.com/888/
                 switch (i) {
                     case 0:
                         gs.piece.rotation[i] = {1,0};
-                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
                         break;
                     case 1:
                         gs.piece.rotation[i] = {0,1};
-                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
                         break;
                     case 2:
                         gs.piece.rotation[i] = {1,1};
-                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
                         break;
                     case 3:
                         gs.piece.rotation[i] = {2,1};
-                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
                         break;
                 }
             }
@@ -513,37 +552,37 @@ bool spawn_piece() { //https://xkcd.com/888/
                 switch (i) {
                     case 0:
                         gs.piece.rotation[i] = {0,0};
-                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
                         break;
                     case 1:
                         gs.piece.rotation[i] = {1,0};
-                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
                         break;
                     case 2:
                         gs.piece.rotation[i] = {1,1};
-                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
                         break;
                     case 3:
                         gs.piece.rotation[i] = {2,1};
-                        pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
+                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
                         break;
                 }
             }
             break;
     }
-    // TODO: correct this, will spawn infinitely once stack has reached the top
-    //check for collisions with existing blocks, if so, destroy block and return false, indicating game over
+    // check for collisions with existing blocks, if so, destroy block and return false, indicating game over
     collisions = check_collisions(gs.piece.ulpt, gs.piece.rotation);
     if (collisions & PSELF) {
         gs.piece.ulpt = {0,0};
         delete_piece();
         success = false;
-    } else {
-        // commit piece
-        for (int i = 0; i < 4; i++) {
-            gs.blocks[WELL_BLOCK_WIDTH*(pos[i].y)+(pos[i].x)] = gs.piece.blocks[i];        
-        }
     }
+    //  else {
+    //     // commit piece
+    //     for (int i = 0; i < 4; i++) {
+    //         gs.blocks[WELL_BLOCK_WIDTH*(pos[i].y)+(pos[i].x)] = gs.piece.blocks[i];        
+    //     }
+    // }
 
     return success;
 }
@@ -558,11 +597,16 @@ void move_piece(Direction d) {
     v2 posn[4];
     v2 tmp;
     switch (d) {
-        case LEFT: new_ulpt = gs.piece.ulpt + V2(-1,0); break;
-        case RIGHT: new_ulpt = gs.piece.ulpt + V2(1,0); break;
-        case DOWN: new_ulpt = gs.piece.ulpt + V2(0,1); break;
+        case LEFT:
+            new_ulpt = gs.piece.ulpt + V2(-1,0); break;
+        case RIGHT:
+            new_ulpt = gs.piece.ulpt + V2(1,0); break;
+        case DOWN:
+            new_ulpt = gs.piece.ulpt + V2(0,1); break;
         case HARD_DOWN:
-            new_ulpt = get_ghost_position();
+            new_ulpt = get_deepest_position(); break;
+        case UP:
+            new_ulpt = gs.piece.ulpt + V2(0,-1); break;
         default:
             break;
     }
@@ -572,27 +616,17 @@ void move_piece(Direction d) {
 
     // commit new position
     if (!(collisions & NOHIT)) {
-        for (int i = 0; i < 4; i++) {
-            poso = gs.piece.ulpt + gs.piece.rotation[i];
-            posn[i] = new_ulpt + gs.piece.rotation[i];
-            gs.blocks[WELL_BLOCK_WIDTH*(poso.y)+(poso.x)] = NULL;
-        }
-        for (int i = 0; i < 4; i++) {
-            gs.blocks[WELL_BLOCK_WIDTH*(posn[i].y)+(posn[i].x)] = gs.piece.blocks[i];
-        }
        gs.piece.ulpt = new_ulpt;
     }
     // create a new piece if we're set
-    // TODO: check timing on this, may need to pass a flag to allow for a full level_tick before spawn
     if (collisions & FLOOR || collisions & PIECE) {
         if (d == DOWN) {
             gs.new_piece = true;
         }
     }
-    // get_ghost_position();
 }
 
-void rotate_piece(bool reverse = false) {
+void rotate_piece(bool reverse = false, int kicks = 0) {
     if (gs.piece.blocks[0] == NULL) {
         return;
     }
@@ -623,16 +657,79 @@ void rotate_piece(bool reverse = false) {
     // commit new position
     if (!(collisions & NOHIT)) {
         for (int i = 0; i < 4; i++) {
-            poso = gs.piece.ulpt + gs.piece.rotation[i];
-            posn[i] = gs.piece.ulpt + new_rotation[i];
             gs.piece.rotation[i] = new_rotation[i];
-            gs.blocks[WELL_BLOCK_WIDTH*(poso.y)+(poso.x)] = NULL;
         }
-        for (int i = 0; i < 4; i++) {
-            gs.blocks[WELL_BLOCK_WIDTH*(posn[i].y)+(posn[i].x)] = gs.piece.blocks[i];
+    } else {
+        // wall/floor kicks
+        if (kicks < 2) {
+            if (collisions & LWALL || (collisions & LPICE && !(collisions && RPICE))) { // TODO: check for piece kicks
+                std::cout << "left kick" << std::endl;
+                move_piece(RIGHT);
+                rotate_piece(reverse, ++kicks);
+            } else if (collisions & RWALL || (collisions & RPICE && !(collisions && LPICE))) {
+                std::cout << "right kick" << std::endl;
+                move_piece(LEFT);
+                rotate_piece(reverse, ++kicks);
+            } else if (collisions & FLOOR || collisions & FPICE) {
+                std::cout << "floor kick" << std::endl;
+                move_piece(UP);
+                rotate_piece(reverse, ++kicks);
+            }
         }
     }
-    // TODO: Kicks?
+}
+
+void check_lines() {
+    bool full;
+    bool empty;
+    bool piece;
+    int lines = 0;
+    // iterate line by line (bottom to top)
+    for (int y = WELL_BLOCK_HEIGHT-1; y > 0; y--) {
+        // looking for lines where it's completely full with blocks
+        full = true; //TODO: need to reject the active piece
+        for (int x = 2; x < WELL_BLOCK_WIDTH; x++) {
+            if (gs.blocks[WELL_BLOCK_WIDTH*y+x] == NULL ) {
+                full = false;
+                break;
+            }
+        }
+        if (full) {
+            std::cout << "clearing line " << y << std::endl;
+            lines++;
+            //delete all blocks in line
+            for (int x = 2; x < WELL_BLOCK_WIDTH; x++) {
+                delete gs.blocks[WELL_BLOCK_WIDTH*y+x];
+                gs.blocks[WELL_BLOCK_WIDTH*y+x] = NULL;
+            }
+            //shift all blocks in line down
+            for (int j = y-1; j > 0; j--) {
+                empty = true;
+                for (int x = 2; x < WELL_BLOCK_WIDTH; x++) {
+                    if (gs.blocks[WELL_BLOCK_WIDTH*j+x] != NULL ) {
+                        empty = false;
+                        break;
+                    }
+                }
+                if (!empty) {
+                    int k = j + 1;
+                    std::cout << "dropping line " << j << std::endl;
+                    for (int x = 2; x < WELL_BLOCK_WIDTH; x++) {
+                        gs.blocks[WELL_BLOCK_WIDTH*k+x] = gs.blocks[WELL_BLOCK_WIDTH*j+x];
+                        gs.blocks[WELL_BLOCK_WIDTH*j+x] = NULL;
+                    }
+                }
+            }
+        }
+    }
+    //adjust score
+    switch (lines) {
+        case 4:     gs.score += 8;  break;
+        case 3:     gs.score += 5;  break;
+        case 2:     gs.score += 3;  break;
+        case 1:     gs.score += 1;  break;
+        default:                    break;
+    }
 }
 
 int main(int argc, char **argv) {
@@ -667,7 +764,6 @@ int main(int argc, char **argv) {
                     gs.blocks[WELL_BLOCK_WIDTH*y+x] = NULL;
                 }
             }
-            // spawn_piece();
 
             fps_timer.start();
 
@@ -726,7 +822,7 @@ int main(int argc, char **argv) {
                                 break;
                             case SDLK_w:
                             case SDLK_UP:
-                                rotate_piece();
+                                rotate_piece(false);
                                 break;
                             case SDLK_s:
                             case SDLK_DOWN:                                
@@ -758,9 +854,9 @@ int main(int argc, char **argv) {
                             move_piece(DOWN);
                         }
                         piece_timer.start();
+                        check_lines();
                     }
                     if (!spawn_success && gs.state == PLAY) {
-                        // std::cout << "GAME OVER" << std::endl;
                         gs.state = OVER;
                         piece_timer.stop();
                     }
