@@ -29,7 +29,7 @@ public:
     static const int rotation_speed = 90.0; //degrees / second
     Ship();
     void handle_event(SDL_Event &event);
-    void move();
+    void move(float delta);
     void render();
 private:
     v2 position;
@@ -52,7 +52,7 @@ void Ship::handle_event(SDL_Event &event) {
                 angular_velocity -= rotation_speed;
                 break;
             case SDLK_DOWN:
-                angular_velocity += rotation_speed
+                angular_velocity += rotation_speed;
                 break;
             case SDLK_LEFT:
                 break;
@@ -81,7 +81,7 @@ void Ship::handle_event(SDL_Event &event) {
 
 void Ship::move(float delta) { //actually moves the camera!
     // position += velocity;
-    angle += speed * delta;
+    angle += angular_velocity * delta;
 }
 
 void Ship::render() {
