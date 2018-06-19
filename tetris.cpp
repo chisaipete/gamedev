@@ -191,67 +191,76 @@ bool close() {
 }
 
 void render_status() {
-    // std::cout << "Level: " << gs.level << " " << gs.score << " Lines: " << gs.lines << std::endl;
     // level
     levelText.str("");
     levelText << "Level: " << gs.level;
     t_level.load_from_rendered_text(levelText.str());
     t_level.render(BLOCK_SIZE/2, SCREEN_HEIGHT-BLOCK_SIZE/2);
-    // t_level.render(0, 0);
 
     // score
     scoreText.str("");
     scoreText << gs.score;
     t_score.load_from_rendered_text(scoreText.str());
     t_score.render((SCREEN_WIDTH/2)-(t_score.get_width()/2), SCREEN_HEIGHT-(BLOCK_SIZE/2));
-    // t_score.render(0, 0);
 
     // lines
     linesText.str("");
-    linesText << "Lines: " << gs.lines;
+    linesText << "Lines: " << gs.lvl_lines << " / " << gs.goal << "  (" << gs.lines << ")";
     t_lines.load_from_rendered_text(linesText.str());
     t_lines.render(SCREEN_WIDTH-(BLOCK_SIZE/2)-t_lines.get_width(), SCREEN_HEIGHT-(BLOCK_SIZE/2));
-    // t_lines.render(0, 0);
 
-    if (gs.state == OVER) {
-        statusText.str("");
-        statusText << "G A M E  O V E R";
-        t_status.load_from_rendered_text(statusText.str());
-        t_status.render((SCREEN_WIDTH/2)-(t_status.get_width()/2), SCREEN_HEIGHT/2);
+    statusText.str("");
+    switch (gs.state) {
+        case START:
+            statusText << "TETRIS";
+            break;
+        case PAUSE:
+            statusText << "PAUSED";
+            break;
+        case PLAY:
+            statusText << " ";
+            break;
+        case OVER:
+            statusText << "G A M E  O V E R";
+            break;
     }
+    t_status.load_from_rendered_text(statusText.str());
+    t_status.render((SCREEN_WIDTH/2)-(t_status.get_width()/2), SCREEN_HEIGHT/2);
 }
 
 void render_well(bool debug = false) {
-    if (gs.piece.blocks[0] != NULL) {
-        // ghost
-        v2 ulpt = get_deepest_position() + V2(0,1);
-        tilemap.set_alpha(128);
-        v2 pos;
-        for (int i = 0; i < 4; i++) {
-            pos = ulpt + gs.piece.rotation[i];
-            tilemap.render((pos.x)*BLOCK_SIZE, (pos.y)*BLOCK_SIZE, &sprites[gs.piece.blocks[0]->color]);
-        }
-        tilemap.set_alpha(255);
-        // piece 
+    if (gs.state == PLAY || gs.state == OVER) {
         if (gs.piece.blocks[0] != NULL) {
+            // ghost
+            v2 ulpt = get_deepest_position() + V2(0,1);
+            tilemap.set_alpha(128);
+            v2 pos;
             for (int i = 0; i < 4; i++) {
-                pos = gs.piece.ulpt + V2(0,1) + gs.piece.rotation[i];
+                pos = ulpt + gs.piece.rotation[i];
                 tilemap.render((pos.x)*BLOCK_SIZE, (pos.y)*BLOCK_SIZE, &sprites[gs.piece.blocks[0]->color]);
             }
-        }
-    }
-    //blocks
-    for (int x = 0; x < WELL_BLOCK_WIDTH; x++) {
-        for (int y = 0; y < WELL_BLOCK_HEIGHT; y++) {
-            if (gs.blocks[WELL_BLOCK_WIDTH*y+x] != NULL) {
-                tilemap.render((x)*BLOCK_SIZE, (y+1)*BLOCK_SIZE, &sprites[gs.blocks[WELL_BLOCK_WIDTH*y+x]->color]);
-
+            tilemap.set_alpha(255);
+            // piece 
+            if (gs.piece.blocks[0] != NULL) {
+                for (int i = 0; i < 4; i++) {
+                    pos = gs.piece.ulpt + V2(0,1) + gs.piece.rotation[i];
+                    tilemap.render((pos.x)*BLOCK_SIZE, (pos.y)*BLOCK_SIZE, &sprites[gs.piece.blocks[0]->color]);
+                }
             }
-            if (debug) {
-                SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, 0xFF); //white
-                SDL_Rect quad = {(x)*BLOCK_SIZE, (y+1)*BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE};
-                SDL_RenderDrawRect(renderer, &quad);
-                SDL_SetRenderDrawColor(renderer, 0x0, 0x0, 0x0, 0xFF); //black    
+        }
+        //blocks
+        for (int x = 0; x < WELL_BLOCK_WIDTH; x++) {
+            for (int y = 0; y < WELL_BLOCK_HEIGHT; y++) {
+                if (gs.blocks[WELL_BLOCK_WIDTH*y+x] != NULL) {
+                    tilemap.render((x)*BLOCK_SIZE, (y+1)*BLOCK_SIZE, &sprites[gs.blocks[WELL_BLOCK_WIDTH*y+x]->color]);
+
+                }
+                if (debug) {
+                    SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, 0xFF); //white
+                    SDL_Rect quad = {(x)*BLOCK_SIZE, (y+1)*BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE};
+                    SDL_RenderDrawRect(renderer, &quad);
+                    SDL_SetRenderDrawColor(renderer, 0x0, 0x0, 0x0, 0xFF); //black    
+                }
             }
         }
     }
@@ -362,7 +371,6 @@ unsigned check_collisions(v2 new_position, v2* new_rotation) {
             }
         }
     }
-
     return collision_mask;
 }
 
@@ -389,183 +397,92 @@ bool spawn_piece() { //https://xkcd.com/888/
     switch (p) {
         case I:
             gs.piece.ulpt = {5,0};
-            // allocating block
             for (int i = 0; i < 4; i++) {
                 gs.piece.blocks[i] = new Block;
                 gs.piece.blocks[i]->color = I;
                 switch (i) {
-                    case 0:
-                        gs.piece.rotation[i] = {0,1};
-                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
-                        break;
-                    case 1:
-                        gs.piece.rotation[i] = {1,1};
-                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
-                        break;
-                    case 2:
-                        gs.piece.rotation[i] = {2,1};
-                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
-                        break;
-                    case 3:
-                        gs.piece.rotation[i] = {3,1};
-                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
-                        break;
+                    case 0: gs.piece.rotation[i] = {0,1}; break;
+                    case 1: gs.piece.rotation[i] = {1,1}; break;
+                    case 2: gs.piece.rotation[i] = {2,1}; break;
+                    case 3: gs.piece.rotation[i] = {3,1}; break;
                 }
             }
             break;
         case J:
             gs.piece.ulpt = {5,0};
-            // allocating block
             for (int i = 0; i < 4; i++) {
                 gs.piece.blocks[i] = new Block;
                 gs.piece.blocks[i]->color = J;
                 switch (i) {
-                    case 0:
-                        gs.piece.rotation[i] = {0,0};
-                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
-                        break;
-                    case 1:
-                        gs.piece.rotation[i] = {0,1};
-                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
-                        break;
-                    case 2:
-                        gs.piece.rotation[i] = {1,1};
-                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
-                        break;
-                    case 3:
-                        gs.piece.rotation[i] = {2,1};
-                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
-                        break;
+                    case 0: gs.piece.rotation[i] = {0,0}; break;
+                    case 1: gs.piece.rotation[i] = {0,1}; break;
+                    case 2: gs.piece.rotation[i] = {1,1}; break;
+                    case 3: gs.piece.rotation[i] = {2,1}; break;
                 }
             }
             break;
         case L:
             gs.piece.ulpt = {5,0};
-            // allocating block
             for (int i = 0; i < 4; i++) {
                 gs.piece.blocks[i] = new Block;
                 gs.piece.blocks[i]->color = L;
                 switch (i) {
-                    case 0:
-                        gs.piece.rotation[i] = {0,1};
-                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
-                        break;
-                    case 1:
-                        gs.piece.rotation[i] = {1,1};
-                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
-                        break;
-                    case 2:
-                        gs.piece.rotation[i] = {2,1};
-                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
-                        break;
-                    case 3:
-                        gs.piece.rotation[i] = {2,0};
-                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
-                        break;
+                    case 0: gs.piece.rotation[i] = {0,1}; break;
+                    case 1: gs.piece.rotation[i] = {1,1}; break;
+                    case 2: gs.piece.rotation[i] = {2,1}; break;
+                    case 3: gs.piece.rotation[i] = {2,0}; break;
                 }
             }
             break;
         case O:
             gs.piece.ulpt = {6,0};
-            // allocating block
             for (int i = 0; i < 4; i++) {
                 gs.piece.blocks[i] = new Block;
                 gs.piece.blocks[i]->color = O;
                 switch (i) {
-                    case 0:
-                        gs.piece.rotation[i] = {0,0};
-                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
-                        break;
-                    case 1:
-                        gs.piece.rotation[i] = {1,0};
-                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
-                        break;
-                    case 2:
-                        gs.piece.rotation[i] = {0,1};
-                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
-                        break;
-                    case 3:
-                        gs.piece.rotation[i] = {1,1};
-                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
-                        break;
+                    case 0: gs.piece.rotation[i] = {0,0}; break;
+                    case 1: gs.piece.rotation[i] = {1,0}; break;
+                    case 2: gs.piece.rotation[i] = {0,1}; break;
+                    case 3: gs.piece.rotation[i] = {1,1}; break;
                 }
             }
             break;
         case S:
             gs.piece.ulpt = {5,0};
-            // allocating block
             for (int i = 0; i < 4; i++) {
                 gs.piece.blocks[i] = new Block;
                 gs.piece.blocks[i]->color = S;
                 switch (i) {
-                    case 0:
-                        gs.piece.rotation[i] = {0,1};
-                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
-                        break;
-                    case 1:
-                        gs.piece.rotation[i] = {1,0};
-                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
-                        break;
-                    case 2:
-                        gs.piece.rotation[i] = {1,1};
-                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
-                        break;
-                    case 3:
-                        gs.piece.rotation[i] = {2,0};
-                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
-                        break;
+                    case 0: gs.piece.rotation[i] = {0,1}; break;
+                    case 1: gs.piece.rotation[i] = {1,0}; break;
+                    case 2: gs.piece.rotation[i] = {1,1}; break;
+                    case 3: gs.piece.rotation[i] = {2,0}; break;
                 }
             }
             break;
         case T:
             gs.piece.ulpt = {5,0};
-            // allocating block
             for (int i = 0; i < 4; i++) {
                 gs.piece.blocks[i] = new Block;
                 gs.piece.blocks[i]->color = T;
                 switch (i) {
-                    case 0:
-                        gs.piece.rotation[i] = {1,0};
-                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
-                        break;
-                    case 1:
-                        gs.piece.rotation[i] = {0,1};
-                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
-                        break;
-                    case 2:
-                        gs.piece.rotation[i] = {1,1};
-                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
-                        break;
-                    case 3:
-                        gs.piece.rotation[i] = {2,1};
-                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
-                        break;
+                    case 0: gs.piece.rotation[i] = {1,0}; break;
+                    case 1: gs.piece.rotation[i] = {0,1}; break;
+                    case 2: gs.piece.rotation[i] = {1,1}; break;
+                    case 3: gs.piece.rotation[i] = {2,1}; break;
                 }
             }
             break;
         case Z:
            gs.piece.ulpt = {5,0};
-            // allocating block
             for (int i = 0; i < 4; i++) {
                 gs.piece.blocks[i] = new Block;
                 gs.piece.blocks[i]->color = Z;
                 switch (i) {
-                    case 0:
-                        gs.piece.rotation[i] = {0,0};
-                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
-                        break;
-                    case 1:
-                        gs.piece.rotation[i] = {1,0};
-                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
-                        break;
-                    case 2:
-                        gs.piece.rotation[i] = {1,1};
-                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
-                        break;
-                    case 3:
-                        gs.piece.rotation[i] = {2,1};
-                        // pos[i] = gs.piece.ulpt + gs.piece.rotation[i];
-                        break;
+                    case 0: gs.piece.rotation[i] = {0,0}; break;
+                    case 1: gs.piece.rotation[i] = {1,0}; break;
+                    case 2: gs.piece.rotation[i] = {1,1}; break;
+                    case 3: gs.piece.rotation[i] = {2,1}; break;
                 }
             }
             break;
@@ -577,13 +494,6 @@ bool spawn_piece() { //https://xkcd.com/888/
         delete_piece();
         success = false;
     }
-    //  else {
-    //     // commit piece
-    //     for (int i = 0; i < 4; i++) {
-    //         gs.blocks[WELL_BLOCK_WIDTH*(pos[i].y)+(pos[i].x)] = gs.piece.blocks[i];        
-    //     }
-    // }
-
     return success;
 }
 
@@ -684,8 +594,8 @@ void check_lines() {
     bool empty;
     bool piece;
     int lines = 0;
-    // iterate line by line (bottom to top)
-    for (int y = WELL_BLOCK_HEIGHT-1; y > 0; y--) {
+    // iterate line by line (top to bottom)
+    for (int y = 0; y < WELL_BLOCK_HEIGHT; y++) {
         // looking for lines where it's completely full with blocks
         full = true; //TODO: need to reject the active piece
         for (int x = 2; x < WELL_BLOCK_WIDTH; x++) {
@@ -695,7 +605,6 @@ void check_lines() {
             }
         }
         if (full) {
-            std::cout << "clearing line " << y << std::endl;
             lines++;
             //delete all blocks in line
             for (int x = 2; x < WELL_BLOCK_WIDTH; x++) {
@@ -713,7 +622,6 @@ void check_lines() {
                 }
                 if (!empty) {
                     int k = j + 1;
-                    std::cout << "dropping line " << j << std::endl;
                     for (int x = 2; x < WELL_BLOCK_WIDTH; x++) {
                         gs.blocks[WELL_BLOCK_WIDTH*k+x] = gs.blocks[WELL_BLOCK_WIDTH*j+x];
                         gs.blocks[WELL_BLOCK_WIDTH*j+x] = NULL;
@@ -724,11 +632,41 @@ void check_lines() {
     }
     //adjust score
     switch (lines) {
-        case 4:     gs.score += 8;  break;
-        case 3:     gs.score += 5;  break;
-        case 2:     gs.score += 3;  break;
-        case 1:     gs.score += 1;  break;
-        default:                    break;
+        case 4:
+            gs.lines += 4;
+            gs.score += 8;
+            gs.lvl_lines += 4;  
+            break;
+        case 3:
+            gs.lines += 3;
+            gs.score += 5;
+            gs.lvl_lines += 3;
+            break;
+        case 2:
+            gs.lines += 2;
+            gs.score += 3;
+            gs.lvl_lines += 2;
+            break;
+        case 1:
+            gs.lines += 1;
+            gs.score += 1;
+            gs.lvl_lines += 1;
+            break;
+        default:
+            break;
+    }
+}
+
+void clear_board() {
+    gs.piece.ulpt = {0,0};
+    for (int i = 0; i < 4; i++) {
+        gs.piece.blocks[i] = NULL;
+        gs.piece.rotation[i] = {0,0};
+    }
+    for (int x = 0; x < WELL_BLOCK_WIDTH; x++) {
+        for (int y = 0; y < WELL_BLOCK_HEIGHT; y++) {
+            gs.blocks[WELL_BLOCK_WIDTH*y+x] = NULL;
+        }
     }
 }
 
@@ -742,7 +680,8 @@ int main(int argc, char **argv) {
             bool quit = false;
             bool fps_on = false;
             bool position_debug = false;
-            bool spawn_success = false;
+            bool spawn_success = true;
+            bool next_level = false;
             int frame_count = 0;
             int delta_ticks = 0;
             int cur_ticks = 0;
@@ -750,20 +689,6 @@ int main(int argc, char **argv) {
 
             //starting initialization
             gs.state = START;
-            gs.level = 0;
-            gs.score = 0;
-            gs.lines = 0;
-            gs.new_piece = false;
-            gs.piece.ulpt = {0,0};
-            for (int i = 0; i < 4; i++) {
-                gs.piece.blocks[i] = NULL;
-                gs.piece.rotation[i] = {0,0};
-            }
-            for (int x = 0; x < WELL_BLOCK_WIDTH; x++) {
-                for (int y = 0; y < WELL_BLOCK_HEIGHT; y++) {
-                    gs.blocks[WELL_BLOCK_WIDTH*y+x] = NULL;
-                }
-            }
 
             fps_timer.start();
 
@@ -839,27 +764,71 @@ int main(int argc, char **argv) {
                             case SDLK_SPACE:
                                 move_piece(HARD_DOWN);
                                 break;
+                            case SDLK_KP_ENTER:
+                            case SDLK_RETURN:
+                                switch (gs.state) {
+                                    case START:
+                                        gs.state = PLAY;
+                                        gs.new_piece = true;
+                                        level_tick = block_step(++gs.level);
+                                        gs.goal = level_goal(gs.level);
+                                        piece_timer.start();
+                                        break;
+                                    case PAUSE:
+                                        gs.state = PLAY;
+                                        piece_timer.unpause();
+                                        break;
+                                    case PLAY: 
+                                        gs.state = PAUSE; 
+                                        piece_timer.pause();
+                                        break;
+                                    case OVER: 
+                                        gs.state = START; 
+                                        break;
+                                    default:
+                                        break;
+                                }
+                                break;
                         }
                     }
                 }
 
-                if (gs.state == PLAY) {
-                    cur_ticks = piece_timer.get_ticks();
-                    if (cur_ticks >= level_tick) {
-                        if (gs.new_piece) {
-                            release_piece();
-                            spawn_success = spawn_piece();
-                            gs.new_piece = !gs.new_piece;
-                        } else {
-                            move_piece(DOWN);
+                switch (gs.state) {
+                    case START:
+                        gs.level = 0;
+                        gs.lvl_lines = 0;
+                        gs.score = 0;
+                        gs.lines = 0;
+                        gs.new_piece = false;
+                        clear_board();
+                        break;
+                    case PAUSE:
+                        break;
+                    case PLAY:
+                        cur_ticks = piece_timer.get_ticks();
+                        if (cur_ticks >= level_tick) {
+                            if (gs.new_piece) {
+                                release_piece();
+                                spawn_success = spawn_piece();
+                                gs.new_piece = !gs.new_piece;
+                            } else {
+                                move_piece(DOWN);
+                            }
+                            piece_timer.start();
+                            check_lines();
                         }
-                        piece_timer.start();
-                        check_lines();
-                    }
-                    if (!spawn_success && gs.state == PLAY) {
-                        gs.state = OVER;
-                        piece_timer.stop();
-                    }
+                        if (!spawn_success) {
+                            gs.state = OVER;
+                            piece_timer.stop();
+                        }
+                        if (gs.lvl_lines >= gs.goal) {
+                            level_tick = block_step(++gs.level);
+                            gs.goal = level_goal(gs.level);
+                            gs.lvl_lines = 0;
+                        }
+                        break;
+                    case OVER:
+                    default: break;
                 }
 
                 // Initialize renderer color (also used for clearing)

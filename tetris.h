@@ -57,16 +57,16 @@ enum Direction {LEFT, RIGHT, DOWN, HARD_DOWN, UP};
 
 
 // collision masks
-const unsigned NOHIT = 0b0000000111;
-const unsigned WALLS = 0b0000000001;
-const unsigned FLOOR = 0b0000000010;
-const unsigned PIECE = 0b0000000100;
-const unsigned PSELF = 0b0000001000;
-const unsigned LWALL = 0b0000010000;
-const unsigned RWALL = 0b0001000000;
-const unsigned RPICE = 0b0010000000;
-const unsigned LPICE = 0b0100000000;
-const unsigned FPICE = 0b1000000000;
+const unsigned NOHIT = 0b000000111;
+const unsigned WALLS = 0b000000001;
+const unsigned FLOOR = 0b000000010;
+const unsigned PIECE = 0b000000100;
+const unsigned PSELF = 0b000001000;
+const unsigned LWALL = 0b000010000;
+const unsigned RWALL = 0b000100000;
+const unsigned RPICE = 0b001000000;
+const unsigned LPICE = 0b010000000;
+const unsigned FPICE = 0b100000000;
 
 
 int block_step (int level) {
@@ -185,8 +185,11 @@ struct Tetrimino {
 struct GameState {
     int state;
     int level;
+    int goal;
     int score;
+    int lvl_score;
     int lines;
+    int lvl_lines;
     bool new_piece;
     Tetrimino piece;
     Block* blocks[(WELL_BLOCK_WIDTH)*WELL_BLOCK_HEIGHT];
