@@ -62,6 +62,10 @@ include_directories(${SDL2_TTF_INCLUDE_DIR})
 # add_executable(breakout ${SOURCE_FILES})
 # target_link_libraries(breakout ${SDL2_LIBRARY} ${SDL2_IMAGE_LIBRARY} ${SDL2_TTF_LIBRARY})
 
-set(SOURCE_FILES tetris.cpp tetris.h)
-add_executable(tetris ${SOURCE_FILES})
-target_link_libraries(tetris ${SDL2_LIBRARY} ${SDL2_IMAGE_LIBRARY} ${SDL2_TTF_LIBRARY})
+# set(SOURCE_FILES tetris.cpp tetris.h)
+# add_executable(tetris ${SOURCE_FILES})
+# target_link_libraries(tetris ${SDL2_LIBRARY} ${SDL2_IMAGE_LIBRARY} ${SDL2_TTF_LIBRARY})
+
+set(SOURCE_FILES asteroids.cpp asteroids.h)
+add_executable(asteroids ${SOURCE_FILES})
+target_link_libraries(asteroids ${SDL2_LIBRARY} ${SDL2_IMAGE_LIBRARY} ${SDL2_TTF_LIBRARY})

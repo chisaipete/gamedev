@@ -15,83 +15,37 @@ TTF_Font* font;
 
 const int SCREEN_FPS = 60;
 const int SCREEN_TICKS_PER_FRAME = 1000 / SCREEN_FPS;
-
-const int BLOCK_SIZE = 32;
-const int WELL_BLOCK_WIDTH = 12; //two columns wider than displayed field (for left hand collision detection)
-const int WELL_BLOCK_HEIGHT = 22; // top two are "hidden"
-const int SCREEN_BLOCK_WIDTH = 14;
-const int SCREEN_BLOCK_HEIGHT = 25; // 
-
-const int SCREEN_WIDTH = BLOCK_SIZE*SCREEN_BLOCK_WIDTH;
-const int SCREEN_HEIGHT = BLOCK_SIZE*SCREEN_BLOCK_HEIGHT;
+const int SCREEN_WIDTH = 640;
+const int SCREEN_HEIGHT = 480;
+const int LEVEL_WIDTH = SCREEN_WIDTH*6;
+const int LEVEL_HEIGHT = SCREEN_HEIGHT*6;
 
 //tilemap indexes
-const int CYAN   = 0; // I
-const int BLUE   = 1; // J
-const int ORANGE = 2; // L
-const int YELLOW = 3; // O
-const int GREEN  = 4; // S
-const int PURPLE = 5; // T
-const int RED    = 6; // Z
-#define PALETTE     ( 7)
-#define UL_WALL     ( 8)
-#define TOP_WALL    ( 9)
-#define UR_WALL     (10)
-#define LEFT_WALL   (11)
-#define EMPTY       (12)
-#define RIGHT_WALL  (13)
-#define LL_WALL     (14)
-#define BOTTOM_WALL (15)
-#define LR_WALL     (16)
-#define BLANK       (17)
+const int THRUST0 =  0;
+const int THRUST1 =  1;
+const int THRUST2 =  2;
+const int THRUST3 =  3;
+const int BULLET  =  4;
+const int SHIP    =  5;
+const int AST_T0  =  6;
+const int AST_T1  =  7;
+const int AST_T2  =  8;
+const int AST_T3  =  9;
+const int AST_S0  = 10;
+const int AST_S1  = 11;
+const int AST_S2  = 12;
+const int AST_S3  = 13;
+const int AST_M0  = 14;
+const int AST_M1  = 15;
+const int AST_M2  = 16;
+const int AST_M3  = 17;
+const int AST_L0  = 18;
 
 //game state FSM
 #define START   (0)
 #define PAUSE   (1)
 #define PLAY    (2)
 #define OVER    (3)
-
-enum Piece       { I, J, L, O, S, T, Z };
-int max_ext[7] = { 4, 3, 3, 2, 3, 3, 3 };
-enum Direction {LEFT, RIGHT, DOWN, HARD_DOWN, UP};
-
-
-// collision masks
-const unsigned NOHIT = 0b000000111;
-const unsigned WALLS = 0b000000001;
-const unsigned FLOOR = 0b000000010;
-const unsigned PIECE = 0b000000100;
-const unsigned PSELF = 0b000001000;
-const unsigned LWALL = 0b000010000;
-const unsigned RWALL = 0b000100000;
-const unsigned RPICE = 0b001000000;
-const unsigned LPICE = 0b010000000;
-const unsigned FPICE = 0b100000000;
-
-
-int block_step (int level) {
-    float step_sec;
-    step_sec = pow((0.8-((static_cast<float>(level)-1.0)*0.007)),(static_cast<float>(level)-1.0));
-    int step_ms = static_cast<int>(step_sec*1000.0);
-} 
-
-int level_goal (int level) {
-    int goal = 5*level;
-    return goal;
-}
-/*
-Goal of each level L is to earn 5*L points:
-Line clear      WScore
-Single          1
-Double          3
-Triple          5
-Tetris          8
-Tetris B2B      12
-T-spin zero     1
-T-spin single   3
-T-spin double   7
-T-spin triple   6
-*/
 
 SDL_Color WHITE = {255,255,255,255};
 SDL_Color RED_ = {255,0,0,255};
@@ -116,7 +70,7 @@ std::ostream &operator<<(std::ostream &os, v2 const &A) {
 }
 
 // convert pair of ints to v2
-v2 V2(int A, int B) {
+v2 V2(float A, float B) {
     v2 r;
     r.x = A;
     r.y = B;
@@ -136,14 +90,14 @@ v2 operator-(v2 A) {
     return r;
 };
 
-v2 operator*(int A, v2 B) {
+v2 operator*(float A, v2 B) {
     v2 r;
     r.x = A*B.x;
     r.y = A*B.y;
     return r;
 };
 
-v2 operator*(v2 A, int B) {
+v2 operator*(v2 A, float B) {
     v2 r;
     r.x = B*A.x;
     r.y = B*A.y;
@@ -164,80 +118,19 @@ v2 operator+(v2 A, v2 B) {
     return r;
 };
 
+v2 operator+=(v2 A, v2 B) {
+    v2 r;
+    r.x = A.x+B.x;
+    r.y = A.y+B.y;
+    return r;
+};
+
 v2 operator-(v2 A, v2 B) {
     v2 r;
     r.x = A.x-B.x;
     r.y = A.y-B.y;
     return r;
 };
-
-/* TETRIS OBJECTS */
-struct Block {
-    int color;
-};
-
-struct Tetrimino {
-    v2 ulpt;
-    Block* blocks[4];
-    v2 rotation[4];
-};
-
-struct GameState {
-    int state;
-    int level;
-    int goal;
-    int score;
-    int lines;
-    int lvl_lines;
-    bool new_piece;
-    Tetrimino piece;
-    Block* blocks[(WELL_BLOCK_WIDTH)*WELL_BLOCK_HEIGHT];
-    //adding a two space buffer to be null to help with detecting drops on edges
-};
-
-/*
-Generates a sequence of all seven pieces permuted randomly, as if they were drawn from a bag. 
-Deals all seven pieces before generating another bag.
-*/
-class Bag {
-    public:
-        Bag();
-        ~Bag();
-        void shuffle_bag();
-        Piece draw_piece();
-        Piece shake();
-    private:
-        std::vector<Piece> bag; 
-};
-
-Bag::Bag() {
-    bag.reserve(7);
-}
-
-Bag::~Bag() {}
-
-void Bag::shuffle_bag() {
-    while(bag.size() < 7) {
-        bag.push_back(shake());
-    }
-}
-
-Piece Bag::draw_piece() {
-    if (bag.empty()) {
-        shuffle_bag();
-    }
-    Piece p = bag.back();
-    bag.pop_back();
-    return p; 
-}
-
-Piece Bag::shake() {
-    Piece p;
-    do {
-        p = static_cast<Piece>(rand() % 7);
-    } while (std::find(bag.begin(), bag.end(), p) != bag.end());
-    return p;
-}
 
 /* TIMER CLASS */
 class Timer {
