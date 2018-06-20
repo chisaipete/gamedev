@@ -10,6 +10,7 @@
 #include <SDL_image.h>
 #include <SDL_ttf.h>
 
+extern SDL_Window* window;
 extern SDL_Renderer* renderer;
 TTF_Font* font;
 
@@ -20,6 +21,7 @@ const int SCREEN_HEIGHT = 480;
 const int LEVEL_WIDTH = SCREEN_WIDTH*6;
 const int LEVEL_HEIGHT = SCREEN_HEIGHT*6;
 
+const int ANIMATION_FRAMES = 4;
 //tilemap indexes
 const int THRUST0 =  0;
 const int THRUST1 =  1;
@@ -132,6 +134,16 @@ v2 operator-(v2 A, v2 B) {
     return r;
 };
 
+/* CAMERA CLASS*/
+// class Camera {
+//     public:
+//         Camera();
+//         ~Camera();
+//     private:
+//         v2 position;
+//         SDL_Rect* rect;
+// }
+
 /* TIMER CLASS */
 class Timer {
     public:
@@ -210,7 +222,7 @@ bool Timer::is_paused() {
     return paused && started;
 }
 
-/* TEXTURE CLASS */
+/* TEXTURE CLASSES */
 class Texture {
     public:
         Texture();
@@ -224,7 +236,7 @@ class Texture {
         void render(int x, int y, SDL_Rect* clip = NULL, double angle = 0.0, SDL_Point* center = nullptr, SDL_RendererFlip flip = SDL_FLIP_NONE);
         int get_width();
         int get_height();
-    private:
+    protected:
         SDL_Texture* texture;
         int width;
         int height;
@@ -322,4 +334,88 @@ int Texture::get_height() {
 }
 
 
+class RawTexture: public Texture {
+    public:
+        RawTexture();
+        ~RawTexture();
+        bool initialize(int w, int h);
+        bool lock_texture();
+        bool unlock_texture();
+        void* get_pixels();
+        int get_pitch();
+    protected:
+        void* pixels;
+        int pitch;
+};
 
+RawTexture::RawTexture() {
+    pixels = NULL;
+    pitch = 0;
+}
+
+RawTexture::~RawTexture() {
+    pixels = NULL;
+    pitch = 0;
+}
+
+bool RawTexture::initialize(int w, int h) {
+    free();
+    SDL_Texture* ntexture = NULL;
+    int bitdepth = 32;
+    SDL_Surface* bsurface = SDL_CreateRGBSurfaceWithFormat(0, w, h, bitdepth, SDL_PIXELFORMAT_RGBA32);
+    if (bsurface == nullptr) {
+        logSDLError(std::cout, "CreateRGBSurfaceWithFormat");
+    } else {
+        SDL_Surface* fsurface = SDL_ConvertSurfaceFormat(bsurface, SDL_GetWindowPixelFormat(window), 0);
+        if (fsurface == nullptr) {
+            logSDLError(std::cout, "ConvertSurfaceFormat");
+        } else {
+            ntexture = SDL_CreateTexture(renderer, SDL_GetWindowPixelFormat(window), SDL_TEXTUREACCESS_STREAMING, fsurface->w, fsurface->h);
+            if (ntexture == nullptr) {
+                logSDLError(std::cout, "CreateTexture");
+            } else {
+                width = fsurface->w;
+                height = fsurface->h;
+            }
+            SDL_FreeSurface(fsurface);
+        }
+        SDL_FreeSurface(bsurface);
+    }
+    texture = ntexture;
+    return texture != NULL;
+}
+
+bool RawTexture::lock_texture() {
+    bool success = true;
+    if (pixels != NULL) {
+        std::cout << "Texture is already locked!" << std::endl;
+        success = false;
+    } else {
+        if (SDL_LockTexture(texture, NULL, &pixels, &pitch) != 0) {
+            logSDLError(std::cout, "Unable to lock texture");
+            success = false;
+        }
+    }
+    return success;
+}
+
+bool RawTexture::unlock_texture() {
+    bool success = true;
+    if (pixels == NULL) {
+        std::cout << "Texture is not locked!" << std::endl;
+        success = false;
+    } else {
+        SDL_UnlockTexture(texture);
+        pixels = NULL;
+        pitch = 0;
+    }
+    return success;
+}
+
+void* RawTexture::get_pixels() {
+    return pixels;
+}
+
+int RawTexture::get_pitch() {
+    return pitch;
+}

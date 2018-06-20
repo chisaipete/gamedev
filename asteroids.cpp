@@ -3,6 +3,7 @@
 SDL_Window* window = NULL;
 SDL_Renderer* renderer = NULL;
 Texture spritemap;
+RawTexture starfield;
 SDL_Rect sprites[19];
 Timer frame_timer;
 Timer movement_timer;
@@ -26,16 +27,21 @@ class Ship {
 public:
     static const int width  = 32; // pixels
     static const int height = 32;
-    static const int rotation_speed = 90.0; //degrees / second
+    static const int thrust_width  = 28; // pixels
+    static const int thrust_height = 28;
+    static const int rotation_speed = 360.0; //degrees / second
     Ship();
     void handle_event(SDL_Event &event);
     void move(float delta);
-    void render();
+    void render(v2 camera);
+    v2 get_position();
 private:
     v2 position;
     v2 velocity;
     double angle;
     double angular_velocity;
+    int frame;
+    bool thruster;
 };
 
 Ship::Ship() {
@@ -43,35 +49,43 @@ Ship::Ship() {
     velocity = {0,0};
     angle = 0.0; //clockwise, -> is 0, angle starts at 45 degrees offset from 0
     angular_velocity = 0.0;
+    frame = 0;
+    thruster = false;
 }
 
 void Ship::handle_event(SDL_Event &event) {
-    if (event.type == SDL_KEYDOWN && event.key.repeat == 0) {
+    if (event.type == SDL_KEYDOWN) { // && event.key.repeat == 0) {
         switch (event.key.keysym.sym) {
             case SDLK_UP:
-                angular_velocity -= rotation_speed;
+                angular_velocity = -rotation_speed;
                 break;
             case SDLK_DOWN:
-                angular_velocity += rotation_speed;
+                angular_velocity = rotation_speed;
                 break;
             case SDLK_LEFT:
                 break;
             case SDLK_RIGHT:
+                break;
+            case SDLK_SPACE:
+                thruster = true;
                 break;
             default:
                 break;
         }
-    } else if (event.type == SDL_KEYUP && event.key.repeat == 0) {
+    } else if (event.type == SDL_KEYUP) { // && event.key.repeat == 0) {
         switch (event.key.keysym.sym) {
             case SDLK_UP:
-                angular_velocity += rotation_speed;
+                angular_velocity = 0.0;
                 break;
             case SDLK_DOWN:
-                angular_velocity -= rotation_speed;
+                angular_velocity = 0.0;
                 break;
             case SDLK_LEFT:
                 break;
             case SDLK_RIGHT:
+                break;
+            case SDLK_SPACE:
+                thruster = false;
                 break;
             default:
                 break;
@@ -82,10 +96,29 @@ void Ship::handle_event(SDL_Event &event) {
 void Ship::move(float delta) { //actually moves the camera!
     // position += velocity;
     angle += angular_velocity * delta;
+
+    if (thruster) {
+        // position.x += cos(angle) * velocity.x * delta;
+        // position.y += sin(angle) * velocity.y * delta;
+    }
 }
 
-void Ship::render() {
-    spritemap.render(position.x-(width/2), position.y-(height/2), &sprites[SHIP], angle);
+void Ship::render(v2 camera) {
+    spritemap.render(position.x-(width/2)-camera.x, position.y-(height/2)-camera.y, &sprites[SHIP], angle);
+
+    if (thruster) {
+        //animate thruster
+        SDL_Point rot_pos = {thrust_width+2,thrust_height+2};
+        spritemap.render(position.x-(thrust_width+2)-camera.x, position.y-(thrust_height+2)-camera.y, &sprites[frame / 4], angle, &rot_pos);
+        frame++;
+        if (frame / 4 >= ANIMATION_FRAMES) {  // loop animation
+            frame = THRUST0;
+        }
+    }
+}
+
+v2 Ship::get_position() {
+    return position;
 }
 
 bool init() {
@@ -119,6 +152,7 @@ bool init() {
 
 bool load() {
     bool success = true;
+    int pixel_format = 0;
 
     if (!spritemap.load_from_file("res/asteroids.png")) {
         success = false;
@@ -126,6 +160,34 @@ bool load() {
         // set standard alpha blending
         // spritemap.set_blend_mode(SDL_BLENDMODE_BLEND);
         // spritemap.set_alpha(255);
+    }
+
+    if (!starfield.initialize(LEVEL_WIDTH, LEVEL_HEIGHT)) {
+        success = false;
+    } else {
+        // generate starfield
+        if (!starfield.lock_texture()) {
+            std::cout << "Unable to lock starfield texture" << std::endl;
+        } else {
+            int format = SDL_GetWindowPixelFormat(window);
+            SDL_PixelFormat* mapping_format = SDL_AllocFormat(format);
+            int* pixels = static_cast<int*>(starfield.get_pixels());
+            int pixel_count = (starfield.get_pitch() / 4) * starfield.get_height();
+            int black = SDL_MapRGBA(mapping_format, 0x00, 0x00, 0x00, 0xFF);
+            int white = SDL_MapRGBA(mapping_format, 0xFF, 0xFF, 0xFF, 0xFF);
+            int star;
+            // fill starfield with color
+            for (int i = 0; i < pixel_count; i++) {
+                star = static_cast<int>(rand() % 1000);
+                if (star > 995) {
+                    pixels[i] = white;
+                } else {
+                    pixels[i] = black;
+                }
+            }
+            starfield.unlock_texture();
+            SDL_FreeFormat(mapping_format);
+        }
     }
 
     font = TTF_OpenFont("res/cc.ttf", 12);
@@ -280,6 +342,10 @@ int main(int argc, char **argv) {
             int delta_ticks = 0;
             float avgFPS = 0.0;
 
+            Ship ship;
+            v2 ship_position;
+            SDL_Rect camera = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
+
             //starting initialization
             gs.state = START;
 
@@ -289,16 +355,13 @@ int main(int argc, char **argv) {
                 frame_timer.start();
                 SDL_Event event;
 
-                Ship ship;
-
-                while (SDL_PollEvent(&event)) {
+                while (SDL_PollEvent(&event) != 0) {
                     if (event.type == SDL_QUIT) {
                             quit = true;
                     }
                     if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE ) {
                         quit = true;
                     }
-                    ship.handle_event(event);
                     if (event.type == SDL_KEYDOWN && event.key.repeat == 0) {
                         switch (event.key.keysym.sym) {
                             case SDLK_1:     
@@ -333,7 +396,12 @@ int main(int argc, char **argv) {
                                 break;
                         }
                     }
+                    ship.handle_event(event);
                 }
+
+
+                delta_ticks = movement_timer.get_ticks();
+                float delta = delta_ticks / 1000.0;
 
                 switch (gs.state) {
                     case START:
@@ -343,6 +411,25 @@ int main(int argc, char **argv) {
                         break;
                     case PLAY:
                         // move stuff
+                        // move things with the delta
+                        ship.move(delta);
+                        ship_position = ship.get_position();
+                        camera.x = ship_position.x - SCREEN_WIDTH / 2;
+                        camera.y = ship_position.y - SCREEN_WIDTH / 2;
+                        //Keep the camera in bounds
+                        if(camera.x < 0) { 
+                            camera.x = 0;
+                        }
+                        if(camera.y < 0) {
+                            camera.y = 0;
+                        }
+                        if(camera.x > LEVEL_WIDTH - camera.w) {
+                            camera.x = LEVEL_WIDTH - camera.w;
+                        }
+                        if(camera.y > LEVEL_HEIGHT - camera.h) {
+                            camera.y = LEVEL_HEIGHT - camera.h;
+                        }
+                        // stop moving things with the delta
                         break;
                     case OVER:
                         break;
@@ -350,18 +437,16 @@ int main(int argc, char **argv) {
                         break;
                 }
 
-                delta_ticks = movement_timer.get_ticks();
-                float delta = delta_ticks / 1000.0;
-                // move things with the delta
-                ship.move(delta);
-                // stop moving things with the delta
                 movement_timer.start();
 
                 SDL_SetRenderDrawColor(renderer, 0x0, 0x0, 0x0, 0xFF); //black
                 SDL_RenderClear(renderer);
                 // render things
                 // render_scene();
-                ship.render();
+                starfield.render(0, 0, &camera);
+                if (gs.state == PLAY) {
+                    ship.render(V2(camera.x, camera.y));
+                }
                 render_status();
                 // stop rendering things
                 if (fps_on) {
