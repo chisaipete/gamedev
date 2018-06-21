@@ -23,34 +23,85 @@ struct GameState {
 
 GameState gs;
 
+class Bullet {
+    public:
+        static const int width = 5;
+        static const int height = 5;
+        static const int speed = 640.0; //pixels / second
+        Bullet(v2 ship_position, double ship_angle);
+        // void handle_event(SDL_Event &event);
+        bool move(float delta);
+        void render(v2 camera);
+        v2 get_position();
+        float get_time_to_death();
+    private:
+        v2 position;
+        double angle;
+        float time_to_death;
+};
+
+Bullet::Bullet(v2 ship_position, double ship_angle) {
+    position = {ship_position.x, ship_position.y};
+    angle = ship_angle;
+    time_to_death = 1.0;
+}
+
+bool Bullet::move(float delta) {
+    position.x += cos((angle+45.0)*PI/180.0) * speed * delta;
+    position.y += sin((angle+45.0)*PI/180.0) * speed * delta;
+    time_to_death -= delta;
+    std::cout << time_to_death << std::endl;
+}
+
+void Bullet::render(v2 camera) {
+    spritemap.render(position.x-(width/2)-camera.x, position.y-(height/2)-camera.y, &sprites[BULLET], angle);
+}
+
+v2 Bullet::get_position() {
+    return position;
+}
+
+float Bullet::get_time_to_death() {
+    return time_to_death;
+}
+
 class Ship {
-public:
-    static const int width  = 32; // pixels
-    static const int height = 32;
-    static const int thrust_width  = 28; // pixels
-    static const int thrust_height = 28;
-    static const int rotation_speed = 360.0; //degrees / second
-    Ship();
-    void handle_event(SDL_Event &event);
-    void move(float delta);
-    void render(v2 camera);
-    v2 get_position();
-private:
-    v2 position;
-    v2 velocity;
-    double angle;
-    double angular_velocity;
-    int frame;
-    bool thruster;
+    public:
+        static const int width  = 32; // pixels
+        static const int height = 32;
+        static const int thrust_width  = 28; // pixels
+        static const int thrust_height = 28;
+        static const int thrust_speed = 320.0; //pixels / second
+        static const int rotation_speed = 360.0; //degrees / second
+        Ship();
+        ~Ship();
+        void handle_event(SDL_Event &event);
+        void move(float delta);
+        void render(v2 camera);
+        v2 get_position();
+        void fire();
+    private:
+        v2 position;
+        // v2 velocity;
+        double angle;
+        double angular_velocity;
+        int frame;
+        bool thruster;
+        std::vector<Bullet> shots; 
 };
 
 Ship::Ship() {
-    position = {SCREEN_WIDTH/2,SCREEN_HEIGHT/2};
-    velocity = {0,0};
+    position = {LEVEL_WIDTH/2,LEVEL_HEIGHT/2};
+    // velocity = {0,0};
     angle = 0.0; //clockwise, -> is 0, angle starts at 45 degrees offset from 0
     angular_velocity = 0.0;
     frame = 0;
     thruster = false;
+}
+
+Ship::~Ship() {
+    // cleanup bullet objects left in shots
+    // std::vector does that for us
 }
 
 void Ship::handle_event(SDL_Event &event) {
@@ -63,11 +114,12 @@ void Ship::handle_event(SDL_Event &event) {
                 angular_velocity = rotation_speed;
                 break;
             case SDLK_LEFT:
+                thruster = true;
                 break;
             case SDLK_RIGHT:
                 break;
             case SDLK_SPACE:
-                thruster = true;
+                fire();
                 break;
             default:
                 break;
@@ -81,11 +133,11 @@ void Ship::handle_event(SDL_Event &event) {
                 angular_velocity = 0.0;
                 break;
             case SDLK_LEFT:
+                thruster = false;
                 break;
             case SDLK_RIGHT:
                 break;
             case SDLK_SPACE:
-                thruster = false;
                 break;
             default:
                 break;
@@ -93,13 +145,25 @@ void Ship::handle_event(SDL_Event &event) {
     }
 }
 
-void Ship::move(float delta) { //actually moves the camera!
+void Ship::move(float delta) {
     // position += velocity;
     angle += angular_velocity * delta;
 
-    if (thruster) {
-        // position.x += cos(angle) * velocity.x * delta;
-        // position.y += sin(angle) * velocity.y * delta;
+    if (thruster) { //clockwise, -> is 0, angle starts at 45 degrees offset from 0
+        position.x += cos((angle+45.0)*PI/180.0) * thrust_speed * delta;
+        position.y += sin((angle+45.0)*PI/180.0) * thrust_speed * delta;
+    }
+
+    // move bullets
+    // check expiration
+    std::vector<Bullet>::iterator itr;
+    for (itr = shots.begin(); itr != shots.end();) {
+        itr->move(delta);
+        if (itr->get_time_to_death() <= 0) {
+            itr = shots.erase(itr);
+        } else {
+            ++itr;
+        }
     }
 }
 
@@ -115,10 +179,18 @@ void Ship::render(v2 camera) {
             frame = THRUST0;
         }
     }
+    // render bullets
+    for ( auto &i : shots) {
+        i.render(camera);
+    }
 }
 
 v2 Ship::get_position() {
     return position;
+}
+
+void Ship::fire() {
+    shots.push_back(Bullet(position, angle));
 }
 
 bool init() {
@@ -179,7 +251,7 @@ bool load() {
             // fill starfield with color
             for (int i = 0; i < pixel_count; i++) {
                 star = static_cast<int>(rand() % 1000);
-                if (star > 995) {
+                if (star > 998) {
                     pixels[i] = white;
                 } else {
                     pixels[i] = black;
@@ -206,7 +278,6 @@ bool load() {
         success = false;
     }
     
-    //TODO: set these up
     sprites[THRUST0].x = 32;
     sprites[THRUST0].y = 0;
     sprites[THRUST0].w = 28;
@@ -403,6 +474,8 @@ int main(int argc, char **argv) {
                 delta_ticks = movement_timer.get_ticks();
                 float delta = delta_ticks / 1000.0;
 
+                Bullet* shots;
+
                 switch (gs.state) {
                     case START:
                         break;
@@ -414,9 +487,9 @@ int main(int argc, char **argv) {
                         // move things with the delta
                         ship.move(delta);
                         ship_position = ship.get_position();
-                        camera.x = ship_position.x - SCREEN_WIDTH / 2;
-                        camera.y = ship_position.y - SCREEN_WIDTH / 2;
-                        //Keep the camera in bounds
+                        camera.x = ship_position.x - (SCREEN_WIDTH / 2);
+                        camera.y = ship_position.y - (SCREEN_HEIGHT / 2);
+                        // keep the camera in level bounds
                         if(camera.x < 0) { 
                             camera.x = 0;
                         }

@@ -14,6 +14,8 @@ extern SDL_Window* window;
 extern SDL_Renderer* renderer;
 TTF_Font* font;
 
+const float PI = 3.141592653589793238463;
+
 const int SCREEN_FPS = 60;
 const int SCREEN_TICKS_PER_FRAME = 1000 / SCREEN_FPS;
 const int SCREEN_WIDTH = 640;
