@@ -64,6 +64,10 @@ void logSDLError(std::ostream &os, const std::string &msg) {
     os << msg << " SDL Error: " << SDL_GetError() << std::endl;
 }
 
+std::ostream &operator<<(std::ostream &os, SDL_Rect const &R) { 
+    return os << "(x:"<< R.x << " y:" << R.y << " w:" << R.w << " h:" << R.h << ")";
+}
+
 /* VECTOR */
 struct v2 {
     int x, y;

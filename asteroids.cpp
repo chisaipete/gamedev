@@ -23,6 +23,101 @@ struct GameState {
 
 GameState gs;
 
+bool check_box_collision(SDL_Rect a, SDL_Rect b) {
+    // assume collision [separating axis text]
+    int leftA, leftB, rightA, rightB, topA, topB, bottomA, bottomB;
+    //sides of a
+    leftA = a.x;
+    rightA = a.x + a.w;
+    topA = a.y;
+    bottomA = a.y + a.h;
+    //sides of b
+    leftB = b.x;
+    rightB = b.x + b.w;
+    topB = b.y;
+    bottomB = b.y + b.h;
+    //check for collisions!
+    if (bottomA <= topB) return false;
+    if (topA >= bottomB) return false;
+    if (rightA <= leftB) return false;
+    if (leftA >= rightB) return false;
+    //none of the sides from a are outside b
+    return true;
+}
+
+class Asteroid {
+    public:
+        Asteroid(v2 spawn_position);
+        // ~Asteroid();
+        void move(float delta);
+        void render(v2 camera);
+        void set_hp(int size);
+        SDL_Rect collider;
+    private:
+        int width;
+        int height;
+        v2 position;
+        int speed;
+        double angle;
+        double angular_velocity;
+        int size;
+        int hp;
+};
+
+Asteroid::Asteroid(v2 spawn_position) {
+    size = AST_M0;
+    width = sprites[size].w;
+    height = sprites[size].h;
+    int x_sign = (rand() % 2 ? -1 : 1);
+    int y_sign = (rand() % 2 ? -1 : 1);
+    position = {
+        spawn_position.x + ((rand() % 100)*x_sign + 50*x_sign),
+        spawn_position.y + ((rand() % 100)*y_sign + 50*y_sign) 
+    };
+    speed = rand() % 20; // pixels/second
+    angle = rand() % 360;
+    angular_velocity = rand() % 90; // degrees /second
+    collider = {position.x-width/2, position.y-height/2, width, height};
+}
+
+void Asteroid::set_hp(int size) {
+    switch (size) {
+        case AST_T0:
+        case AST_T1:
+        case AST_T2:
+        case AST_T3:
+            hp = 1;
+            break;
+        case AST_S0:
+        case AST_S1:
+        case AST_S2:
+        case AST_S3:
+            hp = 2;
+            break;
+        case AST_M0:
+        case AST_M1:
+        case AST_M2:
+        case AST_M3:
+            hp = 3;
+            break;
+        case AST_L0:
+            hp = 4;
+            break;
+    }
+}
+
+void Asteroid::move(float delta) {
+    position.x += speed * delta;
+    position.y += speed * delta;
+    angle += angular_velocity * delta;
+    collider.x = position.x-width/2;
+    collider.y = position.y-height/2;
+}
+
+void Asteroid::render(v2 camera) {
+    spritemap.render(position.x-(width/2)-camera.x, position.y-(height/2)-camera.y, &sprites[size], angle);
+}
+
 class Bullet {
     public:
         static const int width = 5;
@@ -30,10 +125,10 @@ class Bullet {
         static const int speed = 640.0; //pixels / second
         Bullet(v2 ship_position, double ship_angle);
         // void handle_event(SDL_Event &event);
-        bool move(float delta);
+        bool move(float delta, std::vector<Asteroid> &asteroids);
         void render(v2 camera);
-        v2 get_position();
         float get_time_to_death();
+        SDL_Rect collider;
     private:
         v2 position;
         double angle;
@@ -44,21 +139,30 @@ Bullet::Bullet(v2 ship_position, double ship_angle) {
     position = {ship_position.x, ship_position.y};
     angle = ship_angle;
     time_to_death = 1.0;
+    collider = {position.x-width/2, position.y-height/2, width, height};
 }
 
-bool Bullet::move(float delta) {
+bool Bullet::move(float delta, std::vector<Asteroid> &asteroids) {
     position.x += cos((angle+45.0)*PI/180.0) * speed * delta;
     position.y += sin((angle+45.0)*PI/180.0) * speed * delta;
     time_to_death -= delta;
-    std::cout << time_to_death << std::endl;
+    collider.x = position.x-width/2;
+    collider.y = position.y-height/2;
+
+    // check for collision with asteroids
+    std::vector<Asteroid>::iterator astr;
+    for (astr = asteroids.begin(); astr != asteroids.end();) {
+        if(check_box_collision(collider, astr->collider)) {
+            time_to_death = 0.0;
+            astr = asteroids.erase(astr);
+        } else {
+            ++astr;
+        }
+    }
 }
 
 void Bullet::render(v2 camera) {
     spritemap.render(position.x-(width/2)-camera.x, position.y-(height/2)-camera.y, &sprites[BULLET], angle);
-}
-
-v2 Bullet::get_position() {
-    return position;
 }
 
 float Bullet::get_time_to_death() {
@@ -74,34 +178,30 @@ class Ship {
         static const int thrust_speed = 320.0; //pixels / second
         static const int rotation_speed = 360.0; //degrees / second
         Ship();
-        ~Ship();
         void handle_event(SDL_Event &event);
-        void move(float delta);
+        void move(float delta, std::vector<Asteroid> &asteroids);
         void render(v2 camera);
         v2 get_position();
+        std::vector<Bullet> shots; 
+        SDL_Rect collider;
         void fire();
     private:
         v2 position;
-        // v2 velocity;
         double angle;
         double angular_velocity;
         int frame;
         bool thruster;
-        std::vector<Bullet> shots; 
+        int hp;
 };
 
 Ship::Ship() {
     position = {LEVEL_WIDTH/2,LEVEL_HEIGHT/2};
-    // velocity = {0,0};
     angle = 0.0; //clockwise, -> is 0, angle starts at 45 degrees offset from 0
     angular_velocity = 0.0;
     frame = 0;
     thruster = false;
-}
-
-Ship::~Ship() {
-    // cleanup bullet objects left in shots
-    // std::vector does that for us
+    hp = 1;
+    collider = {position.x-width/2, position.y-height/2, width, height};
 }
 
 void Ship::handle_event(SDL_Event &event) {
@@ -145,7 +245,9 @@ void Ship::handle_event(SDL_Event &event) {
     }
 }
 
-void Ship::move(float delta) {
+void Ship::move(float delta, std::vector<Asteroid> &asteroids) {
+    v2 position_o = position;
+
     // position += velocity;
     angle += angular_velocity * delta;
 
@@ -154,11 +256,26 @@ void Ship::move(float delta) {
         position.y += sin((angle+45.0)*PI/180.0) * thrust_speed * delta;
     }
 
+    collider.x = position.x-width/2;
+    collider.y = position.y-height/2;
+
+    // check for collision with asteroids
+    std::vector<Asteroid>::iterator astr;
+    for (astr = asteroids.begin(); astr != asteroids.end();) {
+        if(check_box_collision(collider, astr->collider)) {
+            position = position_o;
+            collider.x = position.x;
+            collider.y = position.y;
+            thruster = false;
+        }
+        ++astr;
+    }
+
     // move bullets
     // check expiration
     std::vector<Bullet>::iterator itr;
     for (itr = shots.begin(); itr != shots.end();) {
-        itr->move(delta);
+        itr->move(delta, asteroids);
         if (itr->get_time_to_death() <= 0) {
             itr = shots.erase(itr);
         } else {
@@ -408,6 +525,7 @@ int main(int argc, char **argv) {
         } else {
             bool quit = false;
             bool fps_on = false;
+            bool collision_debug = false;
             int frame_count = 0;
             int frame_ticks = 0;
             int delta_ticks = 0;
@@ -415,7 +533,9 @@ int main(int argc, char **argv) {
 
             Ship ship;
             v2 ship_position;
-            SDL_Rect camera = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
+            ship_position = ship.get_position();
+            SDL_Rect camera = {ship_position.x - (SCREEN_WIDTH / 2), ship_position.y - (SCREEN_HEIGHT / 2), SCREEN_WIDTH, SCREEN_HEIGHT};
+            std::vector<Asteroid> asteroids;
 
             //starting initialization
             gs.state = START;
@@ -438,13 +558,15 @@ int main(int argc, char **argv) {
                             case SDLK_1:     
                                 fps_on = !fps_on; 
                                 break;
-                            case SDLK_2:     
+                            case SDLK_2:
+                                collision_debug = !collision_debug;
                                 break;
                             case SDLK_8:
                                 break; 
                             case SDLK_9:
                                 break;
                             case SDLK_0:
+                                asteroids.push_back(Asteroid(ship.get_position()));
                                 break;
                             case SDLK_KP_ENTER:
                             case SDLK_RETURN:
@@ -474,8 +596,6 @@ int main(int argc, char **argv) {
                 delta_ticks = movement_timer.get_ticks();
                 float delta = delta_ticks / 1000.0;
 
-                Bullet* shots;
-
                 switch (gs.state) {
                     case START:
                         break;
@@ -483,10 +603,13 @@ int main(int argc, char **argv) {
                         // don't move stuff
                         break;
                     case PLAY:
-                        // move stuff
                         // move things with the delta
-                        ship.move(delta);
+                        ship.move(delta, asteroids);  //and bullets
                         ship_position = ship.get_position();
+                        // move asteroids
+                        for ( auto &a : asteroids) {
+                            a.move(delta);
+                        }
                         camera.x = ship_position.x - (SCREEN_WIDTH / 2);
                         camera.y = ship_position.y - (SCREEN_HEIGHT / 2);
                         // keep the camera in level bounds
@@ -518,9 +641,36 @@ int main(int argc, char **argv) {
                 // render_scene();
                 starfield.render(0, 0, &camera);
                 if (gs.state == PLAY) {
-                    ship.render(V2(camera.x, camera.y));
+                    ship.render(V2(camera.x, camera.y)); // ship and bullets rendered
+                    // render asteroids
+                    for ( auto &a : asteroids) {
+                        a.render(V2(camera.x, camera.y));
+                    }
                 }
                 render_status();
+                if (collision_debug) {
+                    SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, 0xFF); //white
+                    //ship collider
+                    SDL_Rect scol = ship.collider;
+                    scol.x -= camera.x;
+                    scol.y -= camera.y;
+                    SDL_RenderDrawRect(renderer, &scol);
+                    //bullet colliders
+                    for ( auto &b : ship.shots) {
+                        SDL_Rect bcol = b.collider;
+                        bcol.x -= camera.x;
+                        bcol.y -= camera.y;
+                        SDL_RenderDrawRect(renderer, &bcol);
+                    }
+                    //asteroid colliders
+                    for ( auto &a : asteroids) {
+                        SDL_Rect acol = a.collider;
+                        acol.x -= camera.x;
+                        acol.y -= camera.y;
+                        SDL_RenderDrawRect(renderer, &acol);
+                    }
+                    SDL_SetRenderDrawColor(renderer, 0x0, 0x0, 0x0, 0xFF); //black
+                }
                 // stop rendering things
                 if (fps_on) {
                     // calculate and render FPS
