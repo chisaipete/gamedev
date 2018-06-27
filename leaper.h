@@ -18,32 +18,35 @@ const float PI = 3.141592653589793238463;
 
 const int SCREEN_FPS = 60;
 const int SCREEN_TICKS_PER_FRAME = 1000 / SCREEN_FPS;
-const int SCREEN_WIDTH = 640;
-const int SCREEN_HEIGHT = 480;
-const int LEVEL_WIDTH = SCREEN_WIDTH*6;
-const int LEVEL_HEIGHT = SCREEN_HEIGHT*6;
+const int SCREEN_WIDTH = 480;
+const int SCREEN_HEIGHT = 640;
 
-const int ANIMATION_FRAMES = 4;
+const int LEVEL_WIDTH = SCREEN_WIDTH;
+// const int LEVEL_HEIGHT = (SCREEN_HEIGHT*10);
+const int LEVEL_HEIGHT = (SCREEN_HEIGHT);
+const int TILE_SIZE = 32;
+const int LEVEL_TILE_WIDTH = LEVEL_WIDTH/TILE_SIZE;
+const int LEVEL_TILE_HEIGHT = LEVEL_HEIGHT/TILE_SIZE;
+
+const int WALK_FRAMES = 3;
 //tilemap indexes
-const int THRUST0 =  0;
-const int THRUST1 =  1;
-const int THRUST2 =  2;
-const int THRUST3 =  3;
-const int BULLET  =  4;
-const int SHIP    =  5;
-const int AST_T0  =  6;
-const int AST_T1  =  7;
-const int AST_T2  =  8;
-const int AST_T3  =  9;
-const int AST_S0  = 10;
-const int AST_S1  = 11;
-const int AST_S2  = 12;
-const int AST_S3  = 13;
-const int AST_M0  = 14;
-const int AST_M1  = 15;
-const int AST_M2  = 16;
-const int AST_M3  = 17;
-const int AST_L0  = 18;
+const int EMPTY  = -1;
+const int STAND0 =  0;
+const int STAND1 =  1;
+const int WALK0  =  2;
+const int WALK1  =  3;
+const int WALK2  =  4;
+const int JUMP   =  5;
+const int HIT    =  6;
+
+const int GRASS0  =  0;
+const int GRASS1  =  1;
+const int GRASS2  =  2;
+const int GROUND0 =  3;
+const int GROUND1 =  4;
+const int GROUND2 =  5;
+const int GRASS_LEDGE  =  6;
+const int STONE_LEDGE  =  7;
 
 //game state FSM
 #define START   (0)
@@ -208,6 +211,48 @@ float dist_sqr(Circle A, v2 B) {
     int dx = B.x - A.x;
     int dy = B.y - A.y;
     return dx*dx + dy*dy;
+}
+
+/* COLLISION DETECTION */
+const unsigned NOHIT =  0b000001111;
+const unsigned HORIZ =  0b000000011;
+const unsigned LEFT =   0b000000001;
+const unsigned RIGHT =  0b000000010;
+const unsigned VERT =   0b000001100;
+const unsigned BOTTOM = 0b000000100;
+const unsigned TOP =    0b000001000;
+
+unsigned check_collision(SDL_Rect a, SDL_Rect b) {
+    unsigned collision_mask = 0b0000;
+    int leftA, leftB, rightA, rightB, topA, topB, bottomA, bottomB;
+    //sides of a
+    leftA = a.x;
+    rightA = a.x + a.w;
+    topA = a.y;
+    bottomA = a.y + a.h;
+    //sides of b
+    leftB = b.x;
+    rightB = b.x + b.w;
+    topB = b.y;
+    bottomB = b.y + b.h;
+    //check for collisions!
+    if (bottomA <= topB) {
+        std::cout << "" << std::endl;
+    }
+    if (topA >= bottomB) {
+        std::cout << "" << std::endl;
+
+    }
+    if (rightA <= leftB) {
+        std::cout << "" << std::endl;
+
+    }
+    if (leftA >= rightB) {
+        std::cout << "" << std::endl;
+
+    }
+    //none of the sides from a are outside b
+    return collision_mask;
 }
 
 /* TIMER CLASS */
