@@ -18,41 +18,20 @@ const float PI = 3.141592653589793238463;
 
 const int SCREEN_FPS = 60;
 const int SCREEN_TICKS_PER_FRAME = 1000 / SCREEN_FPS;
-const int SCREEN_WIDTH = 480;
-const int SCREEN_HEIGHT = 640;
 
-const int LEVEL_WIDTH = SCREEN_WIDTH;
-// const int LEVEL_HEIGHT = (SCREEN_HEIGHT*10);
-const int LEVEL_HEIGHT = (SCREEN_HEIGHT);
-const int TILE_SIZE = 32;
-const int LEVEL_TILE_WIDTH = LEVEL_WIDTH/TILE_SIZE;
-const int LEVEL_TILE_HEIGHT = LEVEL_HEIGHT/TILE_SIZE;
+// Aspect Ratio : 1.33:1 (4:3)
+const int SCREEN_WIDTH = 1330;
+const int SCREEN_HEIGHT = 1000;
 
-const int WALK_FRAMES = 3;
-//tilemap indexes
-const int EMPTY  = -1;
-const int STAND0 =  0;
-const int STAND1 =  1;
-const int WALK0  =  2;
-const int WALK1  =  3;
-const int WALK2  =  4;
-const int JUMP   =  5;
-const int HIT    =  6;
+//directions
+const int NORTH = 0;
+const int SOUTH = 1;
+const int EAST  = 2;
+const int WEST  = 3;
 
-const int GRASS0  =  0;
-const int GRASS1  =  1;
-const int GRASS2  =  2;
-const int GROUND0 =  3;
-const int GROUND1 =  4;
-const int GROUND2 =  5;
-const int GRASS_LEDGE  =  6;
-const int STONE_LEDGE  =  7;
-
-//game state FSM
-#define START   (0)
-#define PAUSE   (1)
-#define PLAY    (2)
-#define OVER    (3)
+//ui state FSM
+#define INFO   (0)
+#define ACTIVE   (1)
 
 SDL_Color WHITE = {255,255,255,255};
 SDL_Color RED_ = {255,0,0,255};
@@ -115,7 +94,7 @@ void DrawCircle(SDL_Renderer *Renderer, Circle &c)
 }
 
 struct v2 {
-    float x, y;
+    int x, y;
 };
 
 std::ostream &operator<<(std::ostream &os, v2 const &A) { 
@@ -123,7 +102,7 @@ std::ostream &operator<<(std::ostream &os, v2 const &A) {
 }
 
 // convert pair of ints to v2
-v2 V2(float A, float B) {
+v2 V2(int A, int B) {
     v2 r;
     r.x = A;
     r.y = B;
@@ -143,14 +122,14 @@ v2 operator-(v2 A) {
     return r;
 };
 
-v2 operator*(float A, v2 B) {
+v2 operator*(int A, v2 B) {
     v2 r;
     r.x = A*B.x;
     r.y = A*B.y;
     return r;
 };
 
-v2 operator*(v2 A, float B) {
+v2 operator*(v2 A, int B) {
     v2 r;
     r.x = B*A.x;
     r.y = B*A.y;
@@ -214,16 +193,39 @@ float dist_sqr(Circle A, v2 B) {
 }
 
 /* COLLISION DETECTION */
-const unsigned NOHIT =  0b000001111;
-const unsigned HORIZ =  0b000000011;
-const unsigned LEFT =   0b000000001;
-const unsigned RIGHT =  0b000000010;
-const unsigned VERT =   0b000001100;
-const unsigned BOTTOM = 0b000000100;
-const unsigned TOP =    0b000001000;
+bool check_collision(Circle a, SDL_Rect b) {
+    int colx, coly;
+    if (a.x < b.x) {
+        colx = b.x;
+    } else if (a.x > b.x + b.w) {
+        colx = b.x + b.w;
+    } else {
+        colx = a.x;
+    }
+    if (a.y < b.y) {
+        coly = b.y;
+    } else if (a.y > b.y + b.h) {
+        coly = b.y + b.h;
+    } else {
+        coly = a.y;
+    }
+    if (dist_sqr(a,V2(colx,coly)) < a.r*a.r) {
+        return true;
+    }
+    return false;
+}
 
-unsigned check_collision(SDL_Rect a, SDL_Rect b) {
-    unsigned collision_mask = 0b0000;
+bool check_collision(Circle a, Circle b) {
+    int total_rad_sqr = a.r + b.r;
+    total_rad_sqr = total_rad_sqr * total_rad_sqr;
+    if (dist_sqr(a,b) < (total_rad_sqr)) {
+        return true;
+    }
+    return false;
+}
+
+bool check_collision(SDL_Rect a, SDL_Rect b) {
+    // assume collision [separating axis text]
     int leftA, leftB, rightA, rightB, topA, topB, bottomA, bottomB;
     //sides of a
     leftA = a.x;
@@ -236,23 +238,12 @@ unsigned check_collision(SDL_Rect a, SDL_Rect b) {
     topB = b.y;
     bottomB = b.y + b.h;
     //check for collisions!
-    if (bottomA <= topB) {
-        std::cout << "" << std::endl;
-    }
-    if (topA >= bottomB) {
-        std::cout << "" << std::endl;
-
-    }
-    if (rightA <= leftB) {
-        std::cout << "" << std::endl;
-
-    }
-    if (leftA >= rightB) {
-        std::cout << "" << std::endl;
-
-    }
+    if (bottomA <= topB) return false;
+    if (topA >= bottomB) return false;
+    if (rightA <= leftB) return false;
+    if (leftA >= rightB) return false;
     //none of the sides from a are outside b
-    return collision_mask;
+    return true;
 }
 
 /* TIMER CLASS */
