@@ -29,12 +29,20 @@ const int SOUTH = 1;
 const int EAST  = 2;
 const int WEST  = 3;
 
+//cellular automata
+const bool LIVE = true;
+const bool DIE  = false;
+
 //ui state FSM
-#define INFO   (0)
+#define INFO     (0)
 #define ACTIVE   (1)
+#define PAUSE    (2)
 
 SDL_Color WHITE = {255,255,255,255};
-SDL_Color RED_ = {255,0,0,255};
+SDL_Color RED = {255,0,0,255};
+SDL_Color GREEN = {0,255,0,255};
+SDL_Color BLUE = {0,0,255,255};
+SDL_Color BLACK = {0,0,0,255};
 
 unsigned long long rdtsc(){
     unsigned int lo,hi;
