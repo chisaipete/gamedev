@@ -213,6 +213,16 @@ float dist_sqr(Circle A, v2 B) {
     return dx*dx + dy*dy;
 }
 
+v2 rect_center(SDL_Rect a) {
+    float x = a.x + (a.w/2.0);
+    float y = a.y + (a.h/2.0);
+    return V2(x,y);
+}
+
+v2 screen_to_tile(v2 position) {
+    return V2(int(position.x/TILE_SIZE), int(position.y/TILE_SIZE));
+}
+
 /* COLLISION DETECTION */
 const unsigned NOHIT =  0b000001111;
 const unsigned HORIZ =  0b000000011;
@@ -224,34 +234,39 @@ const unsigned TOP =    0b000001000;
 
 unsigned check_collision(SDL_Rect a, SDL_Rect b) {
     unsigned collision_mask = 0b0000;
-    int leftA, leftB, rightA, rightB, topA, topB, bottomA, bottomB;
-    //sides of a
-    leftA = a.x;
-    rightA = a.x + a.w;
-    topA = a.y;
-    bottomA = a.y + a.h;
-    //sides of b
-    leftB = b.x;
-    rightB = b.x + b.w;
-    topB = b.y;
-    bottomB = b.y + b.h;
+
+    v2 ca = rect_center(a);
+    v2 cb = rect_center(b);
+    float w = 0.5 * (a.w + b.w);
+    float h = 0.5 * (a.h + b.h);
+    float dx = ca.x - cb.x;
+    float dy = ca.y - cb.y;
+
     //check for collisions!
-    if (bottomA <= topB) {
-        std::cout << "" << std::endl;
-    }
-    if (topA >= bottomB) {
-        std::cout << "" << std::endl;
+    if (abs(dx) <= w && abs(dy) <= h) {
+        //collision
+        float wy = w * dy;
+        float hx = h * dx;
 
+        if (wy > hx) {
+            if (wy > -hx) {
+                // top
+                collision_mask |= TOP;
+            } else {
+                // left
+                collision_mask |= LEFT;
+            }
+        }  else {
+            if (wy > -hx) {
+                // right
+                collision_mask |= RIGHT;
+            } else {
+                // bottom
+                collision_mask |= BOTTOM;
+            }
+        }
     }
-    if (rightA <= leftB) {
-        std::cout << "" << std::endl;
-
-    }
-    if (leftA >= rightB) {
-        std::cout << "" << std::endl;
-
-    }
-    //none of the sides from a are outside b
+    
     return collision_mask;
 }
 

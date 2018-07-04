@@ -37,9 +37,10 @@ class Player {
         static const int height = TILE_SIZE;
         static const int colw = TILE_SIZE/2;
         static const int colh = (TILE_SIZE/4)*3;
-        static constexpr float max_speed = 160.0; //pixels / second
-        static constexpr float acceleration = 320.0; //pixels / second^2
-        static constexpr float gravity = 134.0; //pixels / second^2
+        static constexpr float max_speed = 200.0; //pixels / second
+        static constexpr float jump_speed = 200.0; //pixels / second
+        // static constexpr float acceleration = 320.0; //pixels / second^2
+        static constexpr float gravity = 600.0; //pixels / second^2 (134)
         Player();
         void handle_event(SDL_Event &event);
         void move(float delta);
@@ -58,6 +59,7 @@ class Player {
         int lives;
         float walk_speed;
         bool up, down, left, right;
+        bool jump, in_jump;
         SDL_RendererFlip flip;
         int frame;
         int walk_frame;
@@ -68,7 +70,7 @@ Player::Player() {
     frame = STAND0;
     walk_frame = WALK0;
     hp = 10;
-    collider = {position.x-width/2, position.y-height/2, colw, colh};
+    collider = {static_cast<int>(position.x)-width/2, static_cast<int>(position.y)-height/2, colw, colh};
     lives = 3;
     walk_speed = 0.0;
     velocity = {0,0};
@@ -76,10 +78,13 @@ Player::Player() {
     down = false;
     left = false;
     right = false;
+    jump = false;
+    in_jump = false;
     flip = SDL_FLIP_NONE;
 }
 
 void Player::handle_event(SDL_Event &event) {
+    // FIXME: theses feel sloppy with respect to simultaneous presses
     if (event.type == SDL_KEYDOWN) { // && event.key.repeat == 0) {
         switch (event.key.keysym.sym) {
             case SDLK_UP:
@@ -96,7 +101,8 @@ void Player::handle_event(SDL_Event &event) {
                 break;
             case SDLK_SPACE:
                 // fire();
-                // jump
+                jump = true;
+                in_jump = true;
                 break;
             default:
                 break;
@@ -116,6 +122,7 @@ void Player::handle_event(SDL_Event &event) {
                 right = false;
                 break;
             case SDLK_SPACE:
+                jump = false;
                 break;
             default:
                 break;
@@ -136,11 +143,14 @@ void Player::move(float delta) {
     }
     if (!left && !right) {
         velocity.x = 0.0;
-    }
+    }  
     if (velocity.x > max_speed) {
         velocity.x = max_speed;
     } else if (velocity.x < -max_speed) {
         velocity.x = -max_speed;
+    }
+    if (jump && !in_jump) {
+        velocity.y = -jump_speed;
     }
     // //friction
     // velocity.x *= .99;
@@ -156,11 +166,47 @@ void Player::move(float delta) {
     // look at all the tiles in the same rows and columns as the player, do x, then y
     // if there is nothing colliding below, apply gravity to y
     // if there is something colliding to the side, reduce speed to 0 on that direction
+
+    int x_min, x_max, y_min, y_max;
+    v2 tile_position = screen_to_tile(V2(collider.x,collider.y));
+    x_min = tile_position.x - 1;
+    if (x_min < 0) x_min = 0;
+    x_max = tile_position.x + 1;
+    if (x_max >= LEVEL_TILE_WIDTH) x_max = LEVEL_TILE_WIDTH -1;
+    y_min = tile_position.y - 1;
+    if (y_min < 0) y_min = 0;
+    y_max = tile_position.y + 1;
+    if (y_max >= LEVEL_TILE_HEIGHT) y_max = LEVEL_TILE_HEIGHT -1;
+
+
     unsigned collisions = 0b000;
 
-    std::cout << collisions << " " << !(collisions & BOTTOM) << std::endl;
+    v2 top_of_ground = {0,0};
+    for (int y = y_min; y <= y_max; y++) {
+        for (int x = x_min; x <= x_max; x++) {
+            if (gs.blocks[LEVEL_TILE_WIDTH*y+x] != NULL && gs.blocks[LEVEL_TILE_WIDTH*y+x]->sprite != EMPTY) {
+                collisions |= check_collision(collider, gs.blocks[LEVEL_TILE_WIDTH*y+x]->collider);
+                if (collisions & BOTTOM) {
+                    top_of_ground.x = position.x;
+                    top_of_ground.y = gs.blocks[LEVEL_TILE_WIDTH*y+x]->collider.y - collider.h;
+                    break;
+                }
+            }
+        }
+    }
 
-    if (!(collisions & BOTTOM)) {
+    // std::cout << screen_to_tile(position) << " " << collisions;
+    // if (collisions & TOP) std::cout << " top";
+    // if (collisions & BOTTOM) std::cout << " bottom";
+    // if (collisions & LEFT) std::cout << " left";
+    // if (collisions & RIGHT) std::cout << " right";
+    // std::cout << std::endl;
+    if (collisions & BOTTOM) {
+        // TODO: set position to be just touching, not fall a delta distance again
+        position = top_of_ground;
+        velocity.y = 0.0;
+        in_jump = false;
+    } else {
         velocity.y += gravity * delta;
         if (velocity.y > max_speed) {
             velocity.y = max_speed;

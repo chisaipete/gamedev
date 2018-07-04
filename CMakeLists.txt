@@ -70,10 +70,11 @@ include_directories(${SDL2_TTF_INCLUDE_DIR})
 # add_executable(asteroids ${SOURCE_FILES})
 # target_link_libraries(asteroids ${SDL2_LIBRARY} ${SDL2_IMAGE_LIBRARY} ${SDL2_TTF_LIBRARY})
 
+# set(SOURCE_FILES dungeon.cpp dungeon.h)
+# add_executable(dungeon ${SOURCE_FILES})
+# target_link_libraries(dungeon ${SDL2_LIBRARY} ${SDL2_IMAGE_LIBRARY} ${SDL2_TTF_LIBRARY})
+
 set(SOURCE_FILES leaper.cpp leaper.h)
 add_executable(leaper ${SOURCE_FILES})
 target_link_libraries(leaper ${SDL2_LIBRARY} ${SDL2_IMAGE_LIBRARY} ${SDL2_TTF_LIBRARY})
 
-set(SOURCE_FILES dungeon.cpp dungeon.h)
-add_executable(dungeon ${SOURCE_FILES})
-target_link_libraries(dungeon ${SDL2_LIBRARY} ${SDL2_IMAGE_LIBRARY} ${SDL2_TTF_LIBRARY})
