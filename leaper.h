@@ -9,6 +9,9 @@
 #include <SDL_timer.h>
 #include <SDL_image.h>
 #include <SDL_ttf.h>
+//Tiled Map support
+#define CUTE_TILED_IMPLEMENTATION
+#include "cute_tiled.h"
 
 extern SDL_Window* window;
 extern SDL_Renderer* renderer;
@@ -70,7 +73,6 @@ void logSDLError(std::ostream &os, const std::string &msg) {
 std::ostream &operator<<(std::ostream &os, SDL_Rect const &R) { 
     return os << "(x:"<< R.x << " y:" << R.y << " w:" << R.w << " h:" << R.h << ")";
 }
-
 
 /* VECTOR & CIRCLE */
 

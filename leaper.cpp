@@ -4,8 +4,6 @@ SDL_Window* window = NULL;
 SDL_Renderer* renderer = NULL;
 Texture level_map;
 Texture actor_map;
-SDL_Rect level_sprites[8];
-SDL_Rect actor_sprites[7];
 Timer frame_timer;
 Timer movement_timer;
 Timer fps_timer;
@@ -15,6 +13,13 @@ std::stringstream fpsText;
 Texture t_score;
 Texture t_status;
 Texture t_fps;
+cute_tiled_map_t* tiled_map;
+cute_tiled_tileset_t* level_tiles;
+cute_tiled_tileset_t* actor_tiles;
+std::vector<SDL_Rect> level_sprites;
+int level_sprites_gid_offset;
+SDL_Rect actor_sprites[7];
+int actor_sprites_gid_offset;
 
 struct Block {
     int sprite;
@@ -31,6 +36,13 @@ struct GameState {
 
 GameState gs;
 
+struct EditorState {
+    int active_sprite;
+    bool level_edit;
+};
+
+EditorState es;
+
 class Player {
     public:
         static const int width  = TILE_SIZE; // pixels
@@ -40,7 +52,9 @@ class Player {
         static constexpr float max_speed = 200.0; //pixels / second
         static constexpr float jump_speed = 200.0; //pixels / second
         // static constexpr float acceleration = 320.0; //pixels / second^2
-        static constexpr float gravity = 600.0; //pixels / second^2 (134)
+        static constexpr float gravity = 800.0; //pixels / second^2 (134)
+        static constexpr float max_fall_speed = gravity; //pixels / second
+
         Player();
         void handle_event(SDL_Event &event);
         void move(float delta);
@@ -101,8 +115,10 @@ void Player::handle_event(SDL_Event &event) {
                 break;
             case SDLK_SPACE:
                 // fire();
-                jump = true;
-                in_jump = true;
+                if (!in_jump) {
+                    jump = true;
+                    in_jump = true;
+                }
                 break;
             default:
                 break;
@@ -202,14 +218,14 @@ void Player::move(float delta) {
     // if (collisions & RIGHT) std::cout << " right";
     // std::cout << std::endl;
     if (collisions & BOTTOM) {
-        // TODO: set position to be just touching, not fall a delta distance again
+        // set position to be just touching, not fall a delta distance again
         position = top_of_ground;
         velocity.y = 0.0;
         in_jump = false;
     } else {
         velocity.y += gravity * delta;
-        if (velocity.y > max_speed) {
-            velocity.y = max_speed;
+        if (velocity.y > max_fall_speed) {
+            velocity.y = max_fall_speed;
         }
     }
 
@@ -333,69 +349,76 @@ bool load() {
     if (!t_fps.load_from_rendered_text("_", RED_)) {
         success = false;
     }
-    
-    // TODO: replace this with tilemap files and level map files (no more hardcodes)
-    level_sprites[GRASS0].x = 0;
-    level_sprites[GRASS0].y = 0;
-    level_sprites[GRASS0].w = 32;
-    level_sprites[GRASS0].h = 32;
-    level_sprites[GRASS1].x = 32;
-    level_sprites[GRASS1].y = 0;
-    level_sprites[GRASS1].w = 32;
-    level_sprites[GRASS1].h = 32;
-    level_sprites[GRASS2].x = 64;
-    level_sprites[GRASS2].y = 0;
-    level_sprites[GRASS2].w = 32;
-    level_sprites[GRASS2].h = 32;
-    level_sprites[GROUND0].x = 0;
-    level_sprites[GROUND0].y = 32;
-    level_sprites[GROUND0].w = 32;
-    level_sprites[GROUND0].h = 32;
-    level_sprites[GROUND1].x = 32;
-    level_sprites[GROUND1].y = 32;
-    level_sprites[GROUND1].w = 32;
-    level_sprites[GROUND1].h = 32;
-    level_sprites[GROUND2].x = 64;
-    level_sprites[GROUND2].y = 32;
-    level_sprites[GROUND2].w = 32;
-    level_sprites[GROUND2].h = 32;
-    level_sprites[GRASS_LEDGE].x = 96;
-    level_sprites[GRASS_LEDGE].y = 0;
-    level_sprites[GRASS_LEDGE].w = 32;
-    level_sprites[GRASS_LEDGE].h = 32;
-    level_sprites[STONE_LEDGE].x = 128;
-    level_sprites[STONE_LEDGE].y = 0;
-    level_sprites[STONE_LEDGE].w = 32;
-    level_sprites[STONE_LEDGE].h = 32;
 
-    actor_sprites[STAND0].x = 0;
-    actor_sprites[STAND0].y = 0;
-    actor_sprites[STAND0].w = 32;
-    actor_sprites[STAND0].h = 32;
-    actor_sprites[STAND1].x = 32;
-    actor_sprites[STAND1].y = 0;
-    actor_sprites[STAND1].w = 32;
-    actor_sprites[STAND1].h = 32;
-    actor_sprites[WALK0].x = 64;
-    actor_sprites[WALK0].y = 0;
-    actor_sprites[WALK0].w = 32;
-    actor_sprites[WALK0].h = 32;
-    actor_sprites[WALK1].x = 96;
-    actor_sprites[WALK1].y = 0;
-    actor_sprites[WALK1].w = 32;
-    actor_sprites[WALK1].h = 32;
-    actor_sprites[WALK2].x = 128;
-    actor_sprites[WALK2].y = 0;
-    actor_sprites[WALK2].w = 32;
-    actor_sprites[WALK2].h = 32;
-    actor_sprites[JUMP].x = 160;
-    actor_sprites[JUMP].y = 0;
-    actor_sprites[JUMP].w = 32;
-    actor_sprites[JUMP].h = 32;
-    actor_sprites[HIT].x = 192;
-    actor_sprites[HIT].y = 0;
-    actor_sprites[HIT].w = 32;
-    actor_sprites[HIT].h = 32;
+    tiled_map = cute_tiled_load_map_from_file("res/leaper.json", NULL);
+    if (tiled_map == nullptr) {
+        success = false;
+    } else {
+        cute_tiled_tileset_t* ts = tiled_map->tilesets;
+        while (ts) {
+            if (strcmp(ts->image.ptr,"leaper_tiles.png") == 0) {
+                std::cout << ts->tilecount << std::endl;
+                level_sprites.reserve(ts->tilecount);
+                level_sprites_gid_offset = ts->firstgid;
+                int gid = ts->firstgid;
+                int x = 0;
+                int y = 0;
+                int t = 0;
+                while (t < ts->tilecount) {
+                    std::cout << t;
+                    SDL_Rect r;
+                    r.x = x;
+                    r.y = y;
+                    r.w = ts->tilewidth;
+                    r.h = ts->tileheight;
+                    level_sprites.push_back(r);
+                    x += ts->tilewidth;
+                    if (x >= ts->imagewidth) {
+                        x = 0;
+                        y += ts->tileheight;
+                    }
+                    ++t;
+                }
+            } else if (strcmp(ts->image.ptr,"leaper_character.png") == 0) {
+                actor_tiles = ts;
+            }
+            ts = ts->next;
+        }
+        std::cout << level_sprites.size() << std::endl;
+        for (auto &t: level_sprites) {
+            std::cout << t << std::endl;
+        }
+
+        // TODO: replace this with tilemap files and level map files (no more hardcodes)
+        actor_sprites[STAND0].x = 0;
+        actor_sprites[STAND0].y = 0;
+        actor_sprites[STAND0].w = 32;
+        actor_sprites[STAND0].h = 32;
+        actor_sprites[STAND1].x = 32;
+        actor_sprites[STAND1].y = 0;
+        actor_sprites[STAND1].w = 32;
+        actor_sprites[STAND1].h = 32;
+        actor_sprites[WALK0].x = 64;
+        actor_sprites[WALK0].y = 0;
+        actor_sprites[WALK0].w = 32;
+        actor_sprites[WALK0].h = 32;
+        actor_sprites[WALK1].x = 96;
+        actor_sprites[WALK1].y = 0;
+        actor_sprites[WALK1].w = 32;
+        actor_sprites[WALK1].h = 32;
+        actor_sprites[WALK2].x = 128;
+        actor_sprites[WALK2].y = 0;
+        actor_sprites[WALK2].w = 32;
+        actor_sprites[WALK2].h = 32;
+        actor_sprites[JUMP].x = 160;
+        actor_sprites[JUMP].y = 0;
+        actor_sprites[JUMP].w = 32;
+        actor_sprites[JUMP].h = 32;
+        actor_sprites[HIT].x = 192;
+        actor_sprites[HIT].y = 0;
+        actor_sprites[HIT].w = 32;
+        actor_sprites[HIT].h = 32;
+    }
 
     return success;
 }
@@ -412,6 +435,8 @@ void delete_level() {
 }
 
 bool close() {
+    // tmx_map_free(map);
+    //TODO: free tilesets, cute_tiled* things
     delete_level();
     level_map.free();
     actor_map.free();
@@ -453,16 +478,29 @@ void render_status() {
 
 void render_scene() {//v2 camera = V2(0,0)) {
     // TODO: render blocks from bottom to top, clipping through the camera
-    for (int y = 0; y < LEVEL_TILE_HEIGHT; y++) {
-        for (int x = 0; x < LEVEL_TILE_WIDTH; x++) {
-            if (gs.blocks[LEVEL_TILE_WIDTH*y+x] != NULL && gs.blocks[LEVEL_TILE_WIDTH*y+x]->sprite != EMPTY) {
-                // level_map.render((x*TILE_SIZE)-camera.x, (y*TILE_SIZE)-camera.y, &level_sprites[gs.blocks[LEVEL_TILE_WIDTH*y+x]->sprite]);
-                level_map.render((x*TILE_SIZE), (y*TILE_SIZE), &level_sprites[gs.blocks[LEVEL_TILE_WIDTH*y+x]->sprite]);
+    cute_tiled_layer_t* layer = tiled_map->layers;
+    // iterate over layers
+    while (layer) {
+        for (int y = 0; y < tiled_map->height; y++) {
+            for (int x = 0; x < tiled_map->width; x++) {
+                level_map.render(
+                    x*tiled_map->tilewidth, 
+                    y*tiled_map->tileheight, 
+                    &level_sprites[layer->data[tiled_map->width*y+x] - level_sprites_gid_offset]
+                    );
             }
+        }
+        layer = layer->next;
+    }
+
+    if (es.level_edit) {
+        if (es.active_sprite != EMPTY) {
+            level_map.render(0,0, &level_sprites[es.active_sprite]);
         }
     }
 }
 
+//TODO: make this function load the level sprites properly
 void load_level(int num = -1) {
     int level;
     if (num == -1) {
@@ -495,6 +533,13 @@ void load_level(int num = -1) {
     }
 }
 
+void cycle_edit_sprite() {
+    es.active_sprite += 1;
+    if (es.active_sprite >= level_sprites.size()) {
+        es.active_sprite = 0;
+    }
+}
+
 int main(int argc, char **argv) {
     if (!init()) {
         std::cout << "Initialization Failed" << std::endl;
@@ -516,6 +561,8 @@ int main(int argc, char **argv) {
 
             //starting initialization
             gs.state = START;
+            es.level_edit = false;
+            es.active_sprite = GRASS0;
 
             fps_timer.start();
 
@@ -538,8 +585,12 @@ int main(int argc, char **argv) {
                             case SDLK_2:
                                 collision_debug = !collision_debug;
                                 break;
-                            case SDLK_8:
+                            case SDLK_3:
+                                es.level_edit = !es.level_edit;
                                 break; 
+                            case SDLK_4:
+                                cycle_edit_sprite();
+                                break;
                             case SDLK_9:
                                 break;
                             case SDLK_0:
@@ -568,6 +619,33 @@ int main(int argc, char **argv) {
                                     default:
                                         break;
                                 }
+                                break;
+                        }
+                    } else if (event.type == SDL_MOUSEBUTTONDOWN && es.level_edit) { // || event.type == SDL_MOUSEBUTTONUP) {
+                        //Get mouse position
+                        int x, y;
+                        SDL_GetMouseState( &x, &y );
+                        v2 target_tile = screen_to_tile(V2(x,y));
+                        int index = LEVEL_TILE_WIDTH*static_cast<int>(target_tile.y)+static_cast<int>(target_tile.x);
+                        if (gs.blocks[index] == NULL) {
+                            gs.blocks[index] = new Block();
+                        }
+                        gs.blocks[index]->sprite = es.active_sprite;
+                        switch (es.active_sprite) {
+                            case EMPTY:
+                            case GRASS0:
+                            case GRASS1:
+                            case GRASS2:
+                                gs.blocks[index]->collider = {0,0,0,0};
+                                break;
+                            case GROUND0:
+                            case GROUND1:
+                            case GROUND2:
+                                gs.blocks[index]->collider = {static_cast<int>(target_tile.x)*TILE_SIZE, static_cast<int>(target_tile.y)*TILE_SIZE, TILE_SIZE, TILE_SIZE};
+                                break;
+                            case GRASS_LEDGE:
+                            case STONE_LEDGE:
+                                gs.blocks[index]->collider = {static_cast<int>(target_tile.x)*TILE_SIZE, static_cast<int>(target_tile.y)*TILE_SIZE, TILE_SIZE, TILE_SIZE/3};
                                 break;
                         }
                     }

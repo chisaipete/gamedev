@@ -39,13 +39,6 @@ message(STATUS "Include directory: " ${SDL2_TTF_INCLUDE_DIR})
 message(STATUS "Libraries: " ${SDL2_TTF_LIBRARY})
 include_directories(${SDL2_TTF_INCLUDE_DIR})
 
-# #libtcod
-# set(LIBTCOD "C:/libtcod-1.6.7")
-# find_package(LIBTCOD REQUIRED)
-# message(STATUS "Include directory: " ${LIBTCOD_INCLUDE_DIR})
-# message(STATUS "Libraries: " ${LIBTCOD_LIBRARY})
-# include_directories(${LIBTCOD_INCLUDE_DIR})
-
 # add_executable(guess_the_number guess_the_number.cpp)
 
 # add_executable(hangman hangman.cpp)
