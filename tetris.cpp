@@ -1,5 +1,7 @@
 #include "tetris.h"
 
+//FIXME: may have a memory leak (sometimes hangs on close)
+
 SDL_Window* window = NULL;
 SDL_Renderer* renderer = NULL;
 Texture tilemap;
@@ -188,6 +190,7 @@ bool close() {
     if (window != nullptr) { SDL_DestroyWindow(window); window = NULL; }
     TTF_Quit();
     SDL_Quit();
+    return true;
 }
 
 void render_status() {
@@ -299,7 +302,7 @@ void render_well(bool debug = false) {
     }
 }
 
-bool release_piece() {
+void release_piece() {
     v2 pos;
     for (int i = 0; i < 4; i++) {
         pos = gs.piece.ulpt + gs.piece.rotation[i];

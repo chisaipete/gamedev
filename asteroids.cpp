@@ -203,7 +203,7 @@ class Bullet {
         static const int speed = 640.0; //pixels / second
         Bullet(v2 ship_position, double ship_angle);
         // void handle_event(SDL_Event &event);
-        bool move(float delta, std::vector<Asteroid> &asteroids);
+        void move(float delta, std::vector<Asteroid> &asteroids);
         void render(v2 camera);
         float get_time_to_death();
         SDL_Rect collider;
@@ -220,7 +220,7 @@ Bullet::Bullet(v2 ship_position, double ship_angle) {
     collider = {position.x-width/2, position.y-height/2, width, height};
 }
 
-bool Bullet::move(float delta, std::vector<Asteroid> &asteroids) {
+void Bullet::move(float delta, std::vector<Asteroid> &asteroids) {
     position.x += cos((angle+45.0)*PI/180.0) * speed * delta;
     position.y += sin((angle+45.0)*PI/180.0) * speed * delta;
     time_to_death -= delta;
@@ -625,6 +625,7 @@ bool close() {
     if (window != nullptr) { SDL_DestroyWindow(window); window = NULL; }
     TTF_Quit();
     SDL_Quit();
+    return true;
 }
 
 void render_status(Ship &ship) {

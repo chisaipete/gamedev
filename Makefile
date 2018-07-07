@@ -7,7 +7,7 @@
 # OBJS = tetris.cpp
 # OBJS = asteroids.cpp
 # OBJS = dungeon.cpp
-OBJS = leaper.cpp
+# OBJS = leaper.cpp
 
 #CC specifies which compiler we're using
 CC = g++
@@ -37,8 +37,34 @@ LINKER_FLAGS = -lmingw32 -lSDL2main -lSDL2 -lSDL2_image -lSDL2_ttf
 # OBJ_NAME = tetris
 # OBJ_NAME = asteroids
 # OBJ_NAME = dungeon
-OBJ_NAME = leaper
+# OBJ_NAME = leaper
 
 #This is the target that compiles our executable
-all : $(OBJS)
-	$(CC) $(OBJS) $(INCLUDE_PATHS) $(LIBRARY_PATHS) $(COMPILER_FLAGS) $(LINKER_FLAGS) -o $(OBJ_NAME)
+all: gtn hangman ttt rps breakout tetris asteroids dungeon leaper
+
+gtn : 
+	$(CC) guess_the_number.cpp $(COMPILER_FLAGS) -o guess_the_number
+
+hangman:
+	$(CC) hangman.cpp $(COMPILER_FLAGS) -o hangman
+
+ttt:
+	$(CC) tic_tac_toe.cpp $(INCLUDE_PATHS) $(LIBRARY_PATHS) $(COMPILER_FLAGS) $(LINKER_FLAGS) -o tic_tac_toe
+
+rps:
+	$(CC) rock_paper_scissors.cpp $(INCLUDE_PATHS) $(LIBRARY_PATHS) $(COMPILER_FLAGS) $(LINKER_FLAGS) -o rock_paper_scissors
+
+breakout:
+	$(CC) breakout.cpp $(INCLUDE_PATHS) $(LIBRARY_PATHS) $(COMPILER_FLAGS) $(LINKER_FLAGS) -o breakout
+
+tetris:
+	$(CC) tetris.cpp $(INCLUDE_PATHS) $(LIBRARY_PATHS) $(COMPILER_FLAGS) $(LINKER_FLAGS) -o tetris
+
+asteroids:
+	$(CC) asteroids.cpp $(INCLUDE_PATHS) $(LIBRARY_PATHS) $(COMPILER_FLAGS) $(LINKER_FLAGS) -o asteroids
+
+dungeon:
+	$(CC) dungeon.cpp $(INCLUDE_PATHS) $(LIBRARY_PATHS) $(COMPILER_FLAGS) $(LINKER_FLAGS) -o dungeon
+
+leaper:
+	$(CC) leaper.cpp $(INCLUDE_PATHS) $(LIBRARY_PATHS) $(COMPILER_FLAGS) $(LINKER_FLAGS) -o leaper

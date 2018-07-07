@@ -76,6 +76,7 @@ bool close() {
     if (window != nullptr) { SDL_DestroyWindow(window); window = NULL; }
     TTF_Quit();
     SDL_Quit();
+    return true;
 }
 
 struct Door {

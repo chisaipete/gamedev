@@ -224,6 +224,7 @@ bool close() {
     // IMG_Quit();
     TTF_Quit();
     SDL_Quit();
+    return true;
 }
 
 //LazyFoo 7
@@ -552,9 +553,8 @@ bool checkBoxCollision(SDL_Rect a, SDL_Rect b) {
     return true;
 }
 
-bool checkPixCollision() {
-
-}
+// bool checkPixCollision() {
+// }
 
 void moveBalls(GameState &gamestate, float delta) {
     vector2 prev_pos;

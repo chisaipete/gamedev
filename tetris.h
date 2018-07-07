@@ -73,6 +73,7 @@ int block_step (int level) {
     float step_sec;
     step_sec = pow((0.8-((static_cast<float>(level)-1.0)*0.007)),(static_cast<float>(level)-1.0));
     int step_ms = static_cast<int>(step_sec*1000.0);
+    return step_ms;
 } 
 
 int level_goal (int level) {
