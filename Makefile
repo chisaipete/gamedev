@@ -40,7 +40,7 @@ LINKER_FLAGS = -lmingw32 -lSDL2main -lSDL2 -lSDL2_image -lSDL2_ttf
 # OBJ_NAME = leaper
 
 #This is the target that compiles our executable
-all: gtn hangman ttt rps breakout tetris asteroids dungeon leaper
+all: gtn hangman ttt rps breakout tetris asteroids dungeon leaper tilemap
 
 gtn : 
 	$(CC) guess_the_number.cpp $(COMPILER_FLAGS) -o guess_the_number
@@ -68,3 +68,7 @@ dungeon:
 
 leaper:
 	$(CC) leaper.cpp $(INCLUDE_PATHS) $(LIBRARY_PATHS) $(COMPILER_FLAGS) $(LINKER_FLAGS) -o leaper
+
+tilemap:
+	$(CC) tilemap.cpp $(INCLUDE_PATHS) $(LIBRARY_PATHS) $(COMPILER_FLAGS) $(LINKER_FLAGS) -o tilemap
+

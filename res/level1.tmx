@@ -28,9 +28,6 @@
    </objectgroup>
   </tile>
  </tileset>
- <tileset firstgid="11" name="leaper_character" tilewidth="32" tileheight="32" tilecount="8" columns="8">
-  <image source="leaper_character.png" width="256" height="32"/>
- </tileset>
  <layer name="Tile Layer 1" width="15" height="20">
   <data encoding="csv">
 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,

@@ -13,25 +13,23 @@ std::stringstream fpsText;
 Texture t_score;
 Texture t_status;
 Texture t_fps;
-cute_tiled_map_t* tiled_map;
-cute_tiled_tileset_t* level_tiles;
-cute_tiled_tileset_t* actor_tiles;
+Tilemap tiled_map;
 std::vector<SDL_Rect> level_sprites;
 int level_sprites_gid_offset;
 SDL_Rect actor_sprites[7];
 int actor_sprites_gid_offset;
 
-struct Block {
-    int sprite;
-    SDL_Rect collider;
-};
+// struct Block {
+//     int sprite;
+//     SDL_Rect collider;
+// };
 
 struct GameState {
     int state;
     int score;
     int lives;
     int level;
-    Block* blocks[LEVEL_TILE_WIDTH*LEVEL_TILE_HEIGHT];
+    // Block* blocks[LEVEL_TILE_WIDTH*LEVEL_TILE_HEIGHT];
 };
 
 GameState gs;
@@ -200,11 +198,12 @@ void Player::move(float delta) {
     v2 top_of_ground = {0,0};
     for (int y = y_min; y <= y_max; y++) {
         for (int x = x_min; x <= x_max; x++) {
-            if (gs.blocks[LEVEL_TILE_WIDTH*y+x] != NULL && gs.blocks[LEVEL_TILE_WIDTH*y+x]->sprite != EMPTY) {
-                collisions |= check_collision(collider, gs.blocks[LEVEL_TILE_WIDTH*y+x]->collider);
+            int gid = tiled_map.tile_gid(LEVEL_TILE_WIDTH*y+x);
+            if (gid > 0) {
+                collisions |= check_collision(collider, tiled_map.get_collider(gid, x*TILE_SIZE, y*TILE_SIZE));
                 if (collisions & BOTTOM) {
                     top_of_ground.x = position.x;
-                    top_of_ground.y = gs.blocks[LEVEL_TILE_WIDTH*y+x]->collider.y - collider.h;
+                    top_of_ground.y = tiled_map.get_collider(gid, x*TILE_SIZE, y*TILE_SIZE).y - collider.h;
                     break;
                 }
             }
@@ -350,94 +349,58 @@ bool load() {
         success = false;
     }
 
-    tiled_map = cute_tiled_load_map_from_file("res/leaper.json", NULL);
-    if (tiled_map == nullptr) {
+    if (!tiled_map.load_from_file("res/leaper.json")) {
         success = false;
-    } else {
-        cute_tiled_tileset_t* ts = tiled_map->tilesets;
-        while (ts) {
-            if (strcmp(ts->image.ptr,"leaper_tiles.png") == 0) {
-                std::cout << ts->tilecount << std::endl;
-                level_sprites.reserve(ts->tilecount);
-                level_sprites_gid_offset = ts->firstgid;
-                int gid = ts->firstgid;
-                int x = 0;
-                int y = 0;
-                int t = 0;
-                while (t < ts->tilecount) {
-                    std::cout << t;
-                    SDL_Rect r;
-                    r.x = x;
-                    r.y = y;
-                    r.w = ts->tilewidth;
-                    r.h = ts->tileheight;
-                    level_sprites.push_back(r);
-                    x += ts->tilewidth;
-                    if (x >= ts->imagewidth) {
-                        x = 0;
-                        y += ts->tileheight;
-                    }
-                    ++t;
-                }
-            } else if (strcmp(ts->image.ptr,"leaper_character.png") == 0) {
-                actor_tiles = ts;
-            }
-            ts = ts->next;
-        }
-        std::cout << level_sprites.size() << std::endl;
-        for (auto &t: level_sprites) {
-            std::cout << t << std::endl;
-        }
-
-        // TODO: replace this with tilemap files and level map files (no more hardcodes)
-        actor_sprites[STAND0].x = 0;
-        actor_sprites[STAND0].y = 0;
-        actor_sprites[STAND0].w = 32;
-        actor_sprites[STAND0].h = 32;
-        actor_sprites[STAND1].x = 32;
-        actor_sprites[STAND1].y = 0;
-        actor_sprites[STAND1].w = 32;
-        actor_sprites[STAND1].h = 32;
-        actor_sprites[WALK0].x = 64;
-        actor_sprites[WALK0].y = 0;
-        actor_sprites[WALK0].w = 32;
-        actor_sprites[WALK0].h = 32;
-        actor_sprites[WALK1].x = 96;
-        actor_sprites[WALK1].y = 0;
-        actor_sprites[WALK1].w = 32;
-        actor_sprites[WALK1].h = 32;
-        actor_sprites[WALK2].x = 128;
-        actor_sprites[WALK2].y = 0;
-        actor_sprites[WALK2].w = 32;
-        actor_sprites[WALK2].h = 32;
-        actor_sprites[JUMP].x = 160;
-        actor_sprites[JUMP].y = 0;
-        actor_sprites[JUMP].w = 32;
-        actor_sprites[JUMP].h = 32;
-        actor_sprites[HIT].x = 192;
-        actor_sprites[HIT].y = 0;
-        actor_sprites[HIT].w = 32;
-        actor_sprites[HIT].h = 32;
     }
+
+    // TODO: replace this with tilemap files and level map files (no more hardcodes)
+    actor_sprites[STAND0].x = 0;
+    actor_sprites[STAND0].y = 0;
+    actor_sprites[STAND0].w = 32;
+    actor_sprites[STAND0].h = 32;
+    actor_sprites[STAND1].x = 32;
+    actor_sprites[STAND1].y = 0;
+    actor_sprites[STAND1].w = 32;
+    actor_sprites[STAND1].h = 32;
+    actor_sprites[WALK0].x = 64;
+    actor_sprites[WALK0].y = 0;
+    actor_sprites[WALK0].w = 32;
+    actor_sprites[WALK0].h = 32;
+    actor_sprites[WALK1].x = 96;
+    actor_sprites[WALK1].y = 0;
+    actor_sprites[WALK1].w = 32;
+    actor_sprites[WALK1].h = 32;
+    actor_sprites[WALK2].x = 128;
+    actor_sprites[WALK2].y = 0;
+    actor_sprites[WALK2].w = 32;
+    actor_sprites[WALK2].h = 32;
+    actor_sprites[JUMP].x = 160;
+    actor_sprites[JUMP].y = 0;
+    actor_sprites[JUMP].w = 32;
+    actor_sprites[JUMP].h = 32;
+    actor_sprites[HIT].x = 192;
+    actor_sprites[HIT].y = 0;
+    actor_sprites[HIT].w = 32;
+    actor_sprites[HIT].h = 32;
 
     return success;
 }
 
-void delete_level() {
-    for (int x = 0; x < LEVEL_TILE_WIDTH; x++) {
-        for (int y = 0; y < LEVEL_TILE_HEIGHT; y++) {
-            if (gs.blocks[LEVEL_TILE_WIDTH*y+x] != NULL) {
-                delete gs.blocks[LEVEL_TILE_WIDTH*y+x];
-                gs.blocks[LEVEL_TILE_WIDTH*y+x] = NULL;
-            }
-        }
-    }
-}
+// void delete_level() {
+//     for (int x = 0; x < LEVEL_TILE_WIDTH; x++) {
+//         for (int y = 0; y < LEVEL_TILE_HEIGHT; y++) {
+//             if (gs.blocks[LEVEL_TILE_WIDTH*y+x] != NULL) {
+//                 delete gs.blocks[LEVEL_TILE_WIDTH*y+x];
+//                 gs.blocks[LEVEL_TILE_WIDTH*y+x] = NULL;
+//             }
+//         }
+//     }
+// }
 
 bool close() {
     // tmx_map_free(map);
     //TODO: free tilesets, cute_tiled* things
-    delete_level();
+    // delete_level();
     level_map.free();
     actor_map.free();
     t_score.free();
@@ -479,58 +442,12 @@ void render_status() {
 
 void render_scene() {//v2 camera = V2(0,0)) {
     // TODO: render blocks from bottom to top, clipping through the camera
-    cute_tiled_layer_t* layer = tiled_map->layers;
-    // iterate over layers
-    while (layer) {
-        for (int y = 0; y < tiled_map->height; y++) {
-            for (int x = 0; x < tiled_map->width; x++) {
-                level_map.render(
-                    x*tiled_map->tilewidth, 
-                    y*tiled_map->tileheight, 
-                    &level_sprites[layer->data[tiled_map->width*y+x] - level_sprites_gid_offset]
-                    );
-            }
-        }
-        layer = layer->next;
-    }
+    tiled_map.render_layers();
 
     if (es.level_edit) {
         if (es.active_sprite != EMPTY) {
             level_map.render(0,0, &level_sprites[es.active_sprite]);
         }
-    }
-}
-
-//TODO: make this function load the level sprites properly
-void load_level(int num = -1) {
-    int level;
-    if (num == -1) {
-        level = gs.level;
-    } else {
-        level = num;
-    }
-    int y;
-    //blocks
-    switch (level) {
-        case 1:
-            y = LEVEL_TILE_HEIGHT - 2;
-            for (int x = 0; x < LEVEL_TILE_WIDTH; x++) {
-                int bnum = (x % 3);
-                gs.blocks[LEVEL_TILE_WIDTH*y+x] = new Block();
-                gs.blocks[LEVEL_TILE_WIDTH*y+x]->sprite = bnum;
-                gs.blocks[LEVEL_TILE_WIDTH*y+x]->collider = {0,0,0,0};
-            }
-            y++;
-            for (int x = 0; x < LEVEL_TILE_WIDTH; x++) {
-                int bnum = (x % 3) + 3;
-                gs.blocks[LEVEL_TILE_WIDTH*y+x] = new Block();
-                gs.blocks[LEVEL_TILE_WIDTH*y+x]->sprite = bnum;
-                gs.blocks[LEVEL_TILE_WIDTH*y+x]->collider = {x*TILE_SIZE, y*TILE_SIZE, TILE_SIZE, TILE_SIZE};
-            }
-            break;
-        default:
-            //populate empty blocks
-            break;
     }
 }
 
@@ -602,7 +519,6 @@ int main(int argc, char **argv) {
                                     case START:
                                         gs.state = PLAY;
                                         gs.level = 1;
-                                        load_level();
                                         break;
                                     case PAUSE:
                                         gs.state = PLAY;
@@ -622,34 +538,35 @@ int main(int argc, char **argv) {
                                 }
                                 break;
                         }
-                    } else if (event.type == SDL_MOUSEBUTTONDOWN && es.level_edit) { // || event.type == SDL_MOUSEBUTTONUP) {
-                        //Get mouse position
-                        int x, y;
-                        SDL_GetMouseState( &x, &y );
-                        v2 target_tile = screen_to_tile(V2(x,y));
-                        int index = LEVEL_TILE_WIDTH*static_cast<int>(target_tile.y)+static_cast<int>(target_tile.x);
-                        if (gs.blocks[index] == NULL) {
-                            gs.blocks[index] = new Block();
-                        }
-                        gs.blocks[index]->sprite = es.active_sprite;
-                        switch (es.active_sprite) {
-                            case EMPTY:
-                            case GRASS0:
-                            case GRASS1:
-                            case GRASS2:
-                                gs.blocks[index]->collider = {0,0,0,0};
-                                break;
-                            case GROUND0:
-                            case GROUND1:
-                            case GROUND2:
-                                gs.blocks[index]->collider = {static_cast<int>(target_tile.x)*TILE_SIZE, static_cast<int>(target_tile.y)*TILE_SIZE, TILE_SIZE, TILE_SIZE};
-                                break;
-                            case GRASS_LEDGE:
-                            case STONE_LEDGE:
-                                gs.blocks[index]->collider = {static_cast<int>(target_tile.x)*TILE_SIZE, static_cast<int>(target_tile.y)*TILE_SIZE, TILE_SIZE, TILE_SIZE/3};
-                                break;
-                        }
                     }
+                    // else if (event.type == SDL_MOUSEBUTTONDOWN && es.level_edit) { // || event.type == SDL_MOUSEBUTTONUP) {
+                    //     //Get mouse position
+                    //     int x, y;
+                    //     SDL_GetMouseState( &x, &y );
+                    //     v2 target_tile = screen_to_tile(V2(x,y));
+                    //     int index = LEVEL_TILE_WIDTH*static_cast<int>(target_tile.y)+static_cast<int>(target_tile.x);
+                    //     if (gs.blocks[index] == NULL) {
+                    //         gs.blocks[index] = new Block();
+                    //     }
+                    //     gs.blocks[index]->sprite = es.active_sprite;
+                    //     switch (es.active_sprite) {
+                    //         case EMPTY:
+                    //         case GRASS0:
+                    //         case GRASS1:
+                    //         case GRASS2:
+                    //             gs.blocks[index]->collider = {0,0,0,0};
+                    //             break;
+                    //         case GROUND0:
+                    //         case GROUND1:
+                    //         case GROUND2:
+                    //             gs.blocks[index]->collider = {static_cast<int>(target_tile.x)*TILE_SIZE, static_cast<int>(target_tile.y)*TILE_SIZE, TILE_SIZE, TILE_SIZE};
+                    //             break;
+                    //         case GRASS_LEDGE:
+                    //         case STONE_LEDGE:
+                    //             gs.blocks[index]->collider = {static_cast<int>(target_tile.x)*TILE_SIZE, static_cast<int>(target_tile.y)*TILE_SIZE, TILE_SIZE, TILE_SIZE/3};
+                    //             break;
+                    //     }
+                    // }
                     player.handle_event(event);
                 }
 
@@ -709,11 +626,10 @@ int main(int argc, char **argv) {
 
                     for (int y = 0; y < LEVEL_TILE_HEIGHT; y++) {
                         for (int x = 0; x < LEVEL_TILE_WIDTH; x++) {
-                            if (gs.blocks[LEVEL_TILE_WIDTH*y+x] != NULL && gs.blocks[LEVEL_TILE_WIDTH*y+x]->sprite != EMPTY) {
-                                col = gs.blocks[LEVEL_TILE_WIDTH*y+x]->collider;
-                                // col.x -= camera.x;
-                                // col.y -= camera.y;
-                                SDL_RenderDrawRect(renderer, &col);
+                            int gid = tiled_map.tile_gid(LEVEL_TILE_WIDTH*y+x);
+                            if (gid > 0) {
+                                SDL_Rect c = tiled_map.get_collider(gid, x*TILE_SIZE, y*TILE_SIZE);
+                                SDL_RenderDrawRect(renderer, &c);
                             }
                         }
                     }

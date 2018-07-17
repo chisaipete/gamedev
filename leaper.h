@@ -5,6 +5,7 @@
 #include <cmath>
 #include <algorithm>
 #include <vector>
+#include <unordered_map>
 #include <SDL.h>
 #include <SDL_timer.h>
 #include <SDL_image.h>
@@ -12,6 +13,7 @@
 //Tiled Map support
 #define CUTE_TILED_IMPLEMENTATION
 #include "cute_tiled.h"
+#include <libgen.h>
 
 extern SDL_Window* window;
 extern SDL_Renderer* renderer;
@@ -364,16 +366,26 @@ class Texture {
         void render(int x, int y, SDL_Rect* clip = NULL, double angle = 0.0, SDL_Point* center = nullptr, SDL_RendererFlip flip = SDL_FLIP_NONE);
         int get_width();
         int get_height();
+        void define_sprites(int number, int offset, int t_width, int t_height);
     protected:
+        friend class Tilemap;
         SDL_Texture* texture;
+        std::string file_path;
         int width;
         int height;
+        std::vector<SDL_Rect> sprites;
+        int gid_offset;
+        int tilewidth;
+        int tileheight;
 };
 
 Texture::Texture() {
     texture = NULL;
     width = 0;
     height = 0;
+    tilewidth = 0;
+    tileheight = 0;
+    gid_offset = 0;
 }
 
 Texture::~Texture() {
@@ -389,8 +401,36 @@ void Texture::free() {
     }
 }
 
+void Texture::define_sprites(int number, int offset, int t_width, int t_height) {
+    // std::cout << "Define sprites: #" << number << " gid start: " << offset << std::endl;
+    sprites.reserve(number);
+    gid_offset = offset;
+    tilewidth = t_width;
+    tileheight = t_height;
+    int gid = gid_offset;
+    int x = 0;
+    int y = 0;
+    int t = 0;
+    while (t < number) {
+        SDL_Rect r;
+        r.x = x;
+        r.y = y;
+        r.w = tilewidth;
+        r.h = tileheight;
+        sprites.push_back(r);
+        // std::cout << "  tile: " << t << " " << r << std::endl;
+        x += tilewidth;
+        if (x >= width) {
+            x = 0;
+            y += tileheight;
+        }
+        ++t;
+    }
+}
+
 bool Texture::load_from_file(std::string path) {
     free();
+    file_path = path;
     SDL_Texture* ntexture = NULL;
     SDL_Surface* lsurface = IMG_Load(path.c_str());
     if (lsurface == nullptr){ //could also load to surface, then optimize with SDL_ConvertSurface?
@@ -546,4 +586,137 @@ void* RawTexture::get_pixels() {
 
 int RawTexture::get_pitch() {
     return pitch;
+}
+
+
+/* TILEMAP */
+class Tilemap {
+    public:
+        Tilemap();
+        ~Tilemap();
+        void free();
+        bool load_from_file(std::string path);
+        void render_layers();
+        void debug();
+        int tile_gid(int position);
+        SDL_Rect get_collider(int gid, int x, int y);
+    protected:
+        std::string map_path;
+        cute_tiled_map_t* map;
+        std::vector<Texture> textures;
+        std::unordered_map<int,int> gid_to_texture;
+        std::unordered_map<int,SDL_Rect> colliders;
+};
+
+Tilemap::Tilemap() {
+
+}
+
+Tilemap::~Tilemap() {
+    free();
+}
+
+void Tilemap::free() {
+    if (map != nullptr) {
+        cute_tiled_free_map(map);
+    }
+}
+
+bool Tilemap::load_from_file(std::string path) {
+    map_path = path;
+    bool success = true;
+    free();
+    // std::cout << "Loading: " << path << std::endl;
+    map = cute_tiled_load_map_from_file(map_path.c_str(), NULL);
+    if (map == nullptr) {
+        success = false;
+    } else {
+        cute_tiled_tileset_t* ts = map->tilesets;
+        int texture_count = 0;
+        while (ts) {
+            // char* fullpath = strcat(basename(path.c_str()), ts->image.ptr);
+            // std::cout << "Loading Tileset: " << strcat(strcat(dirname(const_cast<char*>(path.c_str())),"/"), ts->image.ptr) << std::endl;
+            textures.push_back(Texture());
+            bool success = textures.back().load_from_file(strcat(strcat(dirname(const_cast<char*>(path.c_str())),"/"), ts->image.ptr));
+            textures.back().define_sprites(ts->tilecount, ts->firstgid, ts->tilewidth, ts->tileheight);
+            // std::cout << success << " " << texture_count << " " << textures.back().file_path << std::endl;
+            for (int x = ts->firstgid; x < ts->firstgid+ts->tilecount; x++) {
+                gid_to_texture[x] = texture_count;
+            }
+            texture_count++;
+            cute_tiled_tile_descriptor_t* tile = ts->tiles;
+            while (tile) {
+                // tile->tile_index;
+                cute_tiled_layer_t* objgrp = tile->objectgroup;
+                while (objgrp) {
+                    cute_tiled_object_t* obj = objgrp->objects;
+                    while (obj) {
+                        colliders[tile->tile_index + ts->firstgid] = SDL_Rect({static_cast<int>(obj->x), static_cast<int>(obj->y), obj->width, obj->height});
+                        obj = obj->next;
+                    }
+                    objgrp = objgrp->next;
+                }
+                tile = tile->next;
+            }
+            ts = ts->next;
+        }
+        // std::cout << colliders.size() << std::endl;
+    }
+    // std::cout << "TILEMAP LAYER DATA:" << std::endl;
+    // cute_tiled_layer_t* layer = map->layers;
+    // while(layer) {
+    //     for (int y = 0; y < map->height; y++) {
+    //         for (int x = 0; x < map->width; x++) {
+    //             std::cout << layer->data[map->width*y+x] << " ";
+    //         }
+    //         std::cout << std::endl;
+    //     }
+    //     layer = layer->next;
+    //     std::cout << std::endl;
+    // }
+    return success;
+}
+
+void Tilemap::render_layers() {
+    cute_tiled_layer_t* layer = map->layers;
+    // iterate over layers
+    // TODO: select texture t by gid
+    while (layer) {
+        for (int y = 0; y < map->height; y++) {
+            for (int x = 0; x < map->width; x++) {
+                int t_index = gid_to_texture[layer->data[map->width*y+x]];
+                int s_index = layer->data[map->width*y+x] - textures[t_index].gid_offset;
+                if (s_index >= 0) {
+                    // std::cout << s_index << " ";
+                    // std::cout << x*map->tilewidth << " " << y*map->tileheight << " " << textures[0].sprites[s_index] << std::endl;
+                    textures[t_index].render(x*map->tilewidth, y*map->tileheight, &textures[t_index].sprites[s_index]);
+                }
+            }
+            // std::cout << std::endl;
+        }
+        layer = layer->next;
+    }
+}
+
+int Tilemap::tile_gid(int position) {
+    cute_tiled_layer_t* layer = map->layers;
+    int gid = 0;
+    while (layer) {
+        gid = layer->data[position];
+        layer = layer->next;
+    }
+    return gid;
+}
+
+SDL_Rect Tilemap::get_collider(int gid, int x, int y) {
+    auto search = colliders.find(gid);
+    if(search != colliders.end()) {
+        SDL_Rect c = colliders[gid];
+        c.x += x;
+        c.y += y;
+        return c;
+    } else {
+        //HACK to return a collider that will never collide
+        return {-x,-y,0,0};
+    }      
 }
