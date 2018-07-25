@@ -26,12 +26,14 @@ const int SCREEN_TICKS_PER_FRAME = 1000 / SCREEN_FPS;
 const int SCREEN_WIDTH = 480;
 const int SCREEN_HEIGHT = 640;
 
+const int TILE_SIZE = 32;
+
 const int LEVEL_WIDTH = SCREEN_WIDTH;
 // const int LEVEL_HEIGHT = (SCREEN_HEIGHT*10);
-const int LEVEL_HEIGHT = (SCREEN_HEIGHT);
-const int TILE_SIZE = 32;
-const int LEVEL_TILE_WIDTH = LEVEL_WIDTH/TILE_SIZE;
-const int LEVEL_TILE_HEIGHT = LEVEL_HEIGHT/TILE_SIZE;
+const int LEVEL_HEIGHT = TILE_SIZE*60;
+const int LEVEL_TILE_WIDTH = 15;
+// const int LEVEL_TILE_HEIGHT = LEVEL_HEIGHT/TILE_SIZE;
+const int LEVEL_TILE_HEIGHT = 60;
 
 const int WALK_FRAMES = 3;
 //tilemap indexes
@@ -596,7 +598,7 @@ class Tilemap {
         ~Tilemap();
         void free();
         bool load_from_file(std::string path);
-        void render_layers();
+        void render_layers(SDL_Rect camera);
         void debug();
         int tile_gid(int position);
         SDL_Rect get_collider(int gid, int x, int y);
@@ -677,19 +679,23 @@ bool Tilemap::load_from_file(std::string path) {
     return success;
 }
 
-void Tilemap::render_layers() {
+void Tilemap::render_layers(SDL_Rect camera) {
+    int y_tile_pos = camera.y/TILE_SIZE;
+    std::cout << camera << " " << y_tile_pos << std::endl;
+    // TODO: offset which tiles are drawn based on simple occlusion based on camera position
+
     cute_tiled_layer_t* layer = map->layers;
     // iterate over layers
-    // TODO: select texture t by gid
+    // selecting texture t by gid
     while (layer) {
-        for (int y = 0; y < map->height; y++) {
+        for (int y = y_tile_pos; y < map->height; y++) {
             for (int x = 0; x < map->width; x++) {
                 int t_index = gid_to_texture[layer->data[map->width*y+x]];
                 int s_index = layer->data[map->width*y+x] - textures[t_index].gid_offset;
                 if (s_index >= 0) {
                     // std::cout << s_index << " ";
                     // std::cout << x*map->tilewidth << " " << y*map->tileheight << " " << textures[0].sprites[s_index] << std::endl;
-                    textures[t_index].render(x*map->tilewidth, y*map->tileheight, &textures[t_index].sprites[s_index]);
+                    textures[t_index].render(x*map->tilewidth, y*map->tileheight - (y_tile_pos*TILE_SIZE), &textures[t_index].sprites[s_index]);
                 }
             }
             // std::cout << std::endl;

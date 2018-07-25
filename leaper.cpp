@@ -18,6 +18,7 @@ std::vector<SDL_Rect> level_sprites;
 int level_sprites_gid_offset;
 SDL_Rect actor_sprites[7];
 int actor_sprites_gid_offset;
+SDL_Rect camera = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
 
 // struct Block {
 //     int sprite;
@@ -57,6 +58,7 @@ class Player {
         void handle_event(SDL_Event &event);
         void move(float delta);
         void render();//v2 camera);
+        void set_camera();
         v2 get_position();
         v2 get_velocity();
         int get_lives();
@@ -237,11 +239,12 @@ void Player::move(float delta) {
         collider.x = position.x;
         velocity.x = 0.0;
     }
+
+    set_camera();
 }
 
 void Player::render() {
-    // TODO: change what frame is rendered depending on movement
-    // actor_map.render(position.x-(width/2)-camera.x, position.y-(height/2)-camera.y, &actor_sprites[STAND0]);
+    // change what frame is rendered depending on movement
     frame = STAND0;
     if (velocity.x < 0) {
         flip = SDL_FLIP_NONE;
@@ -255,11 +258,22 @@ void Player::render() {
         frame = JUMP;
     }
 
-    actor_map.render(position.x-(colw/2), position.y-(height/4), &actor_sprites[frame], 0.0, NULL, flip);
+    actor_map.render((position.x-(colw/2)) - camera.x, (position.y-(height/4)) - camera.y, &actor_sprites[frame], 0.0, NULL, flip);
 
     walk_frame++;
     if (walk_frame/9 >= WALK_FRAMES) {
         walk_frame = WALK0;
+    }
+}
+
+void Player::set_camera() {
+    camera.x = 0;
+    camera.y = (position.y + height/2) - (SCREEN_HEIGHT/2);
+    if (camera.y < 0) {
+        camera.y = 0;
+    }
+    if (camera.y > LEVEL_HEIGHT - camera.h) {
+        camera.y = LEVEL_HEIGHT - camera.h;
     }
 }
 
@@ -294,8 +308,8 @@ bool init() {
             logSDLError(std::cout, "TTF_Init");
             success = false;
         } else {
-            // window = SDL_CreateWindow("Leaper", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
-            window = SDL_CreateWindow("Leaper", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, LEVEL_WIDTH, LEVEL_HEIGHT, SDL_WINDOW_SHOWN);
+            window = SDL_CreateWindow("Leaper", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
+            // window = SDL_CreateWindow("Leaper", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, LEVEL_WIDTH, LEVEL_HEIGHT, SDL_WINDOW_SHOWN);
             if (window == nullptr){
                 logSDLError(std::cout, "SDL_CreateWindow");
                 success = false;
@@ -349,7 +363,7 @@ bool load() {
         success = false;
     }
 
-    if (!tiled_map.load_from_file("res/leaper.json")) {
+    if (!tiled_map.load_from_file("res/leaperB.json")) {
         success = false;
     }
 
@@ -440,9 +454,9 @@ void render_status() {
     t_status.render((SCREEN_WIDTH/2)-(t_status.get_width()/2), SCREEN_HEIGHT/2);
 }
 
-void render_scene() {//v2 camera = V2(0,0)) {
+void render_scene() {
     // TODO: render blocks from bottom to top, clipping through the camera
-    tiled_map.render_layers();
+    tiled_map.render_layers(camera);
 
     if (es.level_edit) {
         if (es.active_sprite != EMPTY) {
@@ -475,7 +489,6 @@ int main(int argc, char **argv) {
 
             Player player;
             v2 player_position;
-            // SDL_Rect camera = {0, LEVEL_HEIGHT-(SCREEN_HEIGHT/2), SCREEN_WIDTH, SCREEN_HEIGHT};
 
             //starting initialization
             gs.state = START;
@@ -529,8 +542,6 @@ int main(int argc, char **argv) {
                                     case OVER:
                                         player = Player();
                                         player_position = player.get_position();
-                                        // camera.x = player_position.x - (SCREEN_WIDTH / 2);
-                                        // camera.y = player_position.y - (SCREEN_HEIGHT / 2);
                                         gs.state = START;
                                         break;
                                     default:
@@ -582,22 +593,7 @@ int main(int argc, char **argv) {
                         break;
                     case PLAY:
                         // move things with the delta
-                        player.move(delta);
-                        // player_position = player.get_position();
-                        // camera.y = player_position.y - (SCREEN_HEIGHT / 2);
-                        // keep the camera in level bounds
-                        // if(camera.x < 0) { 
-                        //     camera.x = 0;
-                        // }
-                        // if(camera.y < 0) {
-                        //     camera.y = 0;
-                        // }
-                        // if(camera.x > LEVEL_WIDTH - camera.w) {
-                        //     camera.x = LEVEL_WIDTH - camera.w;
-                        // }
-                        // if(camera.y > LEVEL_HEIGHT - camera.h) {
-                        //     camera.y = LEVEL_HEIGHT - camera.h;
-                        // }
+                        player.move(delta); //also updates the camera
                         // stop moving things with the delta
                         break;
                     case OVER:
@@ -611,17 +607,15 @@ int main(int argc, char **argv) {
                 SDL_SetRenderDrawColor(renderer, 0x0, 0x0, 0x0, 0xFF); //black
                 SDL_RenderClear(renderer);
                 // render things
-                render_scene();//V2(camera.x, camera.y));
                 if (gs.state == PLAY) {
-                    player.render();//V2(camera.x, camera.y)); // player and bullets rendered
+                    render_scene();// background/level
+                    player.render();// player and bullets rendered
                 }
                 render_status();
                 if (collision_debug) {
                     SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, 0xFF); //white
                     //player collider
                     SDL_Rect col = player.collider;
-                    // col.x -= camera.x;
-                    // col.y -= camera.y;
                     SDL_RenderDrawRect(renderer, &col);
 
                     for (int y = 0; y < LEVEL_TILE_HEIGHT; y++) {
