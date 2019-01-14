@@ -72,3 +72,5 @@ leaper:
 tilemap:
 	$(CC) tilemap.cpp $(INCLUDE_PATHS) $(LIBRARY_PATHS) $(COMPILER_FLAGS) $(LINKER_FLAGS) -o tilemap
 
+tiny:
+	$(CC) tiny.cpp $(INCLUDE_PATHS) $(LIBRARY_PATHS) $(COMPILER_FLAGS) $(LINKER_FLAGS) -o tiny

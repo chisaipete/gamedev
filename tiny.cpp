@@ -1,9 +1,9 @@
-#include "leaper.h"
+#include "tiny.h"
 
 SDL_Window* window = NULL;
 SDL_Renderer* renderer = NULL;
-Tilemap tilemap;
-// Texture texture;
+
+RawTexture image;
 
 bool init() {
     bool success = true;
@@ -16,7 +16,8 @@ bool init() {
             logSDLError(std::cout, "TTF_Init");
             success = false;
         } else {
-            window = SDL_CreateWindow("Tilemap Render Test", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 8*32, 8*32, SDL_WINDOW_SHOWN);
+            window = SDL_CreateWindow("Tiny Renderer", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
+            // window = SDL_CreateWindow("Leaper", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, LEVEL_WIDTH, LEVEL_HEIGHT, SDL_WINDOW_SHOWN);
             if (window == nullptr){
                 logSDLError(std::cout, "SDL_CreateWindow");
                 success = false;
@@ -29,31 +30,31 @@ bool init() {
             }
         }
     }
-
     return success;
 }
 
 bool load() {
     bool success = true;
-
-    if (!tilemap.load_from_file("res/testmap.json")) {
+    if (!image.initialize(SCREEN_WIDTH, SCREEN_HEIGHT)) {
         success = false;
     }
-
-    // if (!texture.load_from_file("res/pacman.png")) {
-    //     success = false;
-    // }
-
     return success;
 }
 
 bool close() {
-    if (font != nullptr) { TTF_CloseFont(font);font = NULL; }
+    image.free();
+    if (font != nullptr) { TTF_CloseFont(font); font = NULL; }
     if (renderer != nullptr) { SDL_DestroyRenderer(renderer); renderer = NULL; }
     if (window != nullptr) { SDL_DestroyWindow(window); window = NULL; }
     TTF_Quit();
     SDL_Quit();
     return true;
+}
+
+void render() {
+    image.lock_texture();
+    image.set(52, 41, RED);
+    image.unlock_texture();
 }
 
 int main(int argc, char **argv) {
@@ -68,19 +69,22 @@ int main(int argc, char **argv) {
             while (!quit) {
                 SDL_Event event;
 
-                while (SDL_PollEvent(&event)) {
+                while (SDL_PollEvent(&event) != 0) {
                     if (event.type == SDL_QUIT) {
                             quit = true;
                     }
+                    if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE ) {
+                        quit = true;
+                    }
                 }
+
+                render();
 
                 SDL_SetRenderDrawColor(renderer, 0x0, 0x0, 0x0, 0xFF); //black
                 SDL_RenderClear(renderer);
-                // render
-                // tilemap.debug();
-                // texture.render(0,0);
-                SDL_Rect camera;
-                tilemap.render_layers(camera);
+
+                image.render(0, 0, nullptr, 0, nullptr, SDL_FLIP_VERTICAL);
+
                 SDL_RenderPresent(renderer);
             }
         }
