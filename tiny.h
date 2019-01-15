@@ -20,8 +20,10 @@ void logSDLError(std::ostream &os, const std::string &msg) {
     os << msg << " SDL Error: " << SDL_GetError() << std::endl;
 }
 
+SDL_Color BLACK = {  0,  0,  0,255};
 SDL_Color WHITE = {255,255,255,255};
-SDL_Color RED = {255,0,0,255};
+SDL_Color GREEN = {  0,255,  0,255};
+SDL_Color RED   = {255,  0,  0,255};
 
 /* VECTORS */
 template <class t> struct v2 {
