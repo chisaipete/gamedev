@@ -1,10 +1,12 @@
 #include <iostream>
-// #include <sstream>
+#include <sstream>
+#include <string>
+#include <fstream>
 #include <cstdlib>
 // #include <ctime>
-// #include <cmath>
+#include <cmath>
 // #include <algorithm>
-// #include <vector>
+#include <vector>
 #include <SDL.h>
 #include <SDL_timer.h>
 #include <SDL_image.h>
@@ -14,9 +16,6 @@ extern SDL_Window* window;
 extern SDL_Renderer* renderer;
 TTF_Font* font;
 
-const int SCREEN_WIDTH = 100;
-const int SCREEN_HEIGHT = 100;
-
 void logSDLError(std::ostream &os, const std::string &msg) {
     os << msg << " SDL Error: " << SDL_GetError() << std::endl;
 }
@@ -24,23 +23,130 @@ void logSDLError(std::ostream &os, const std::string &msg) {
 SDL_Color WHITE = {255,255,255,255};
 SDL_Color RED = {255,0,0,255};
 
+/* VECTORS */
+template <class t> struct v2 {
+    union {
+        struct {t u, v;};
+        struct {t x, y;};
+        t raw[2];
+    };
+    v2() : u(0), v(0) {}
+    v2(t _u, t _v) : u(_u), v(_v) {}
+    inline v2<t> operator +(const v2<t> &V) const { return v2<t>(u+V.u, v+V.v); }
+    inline v2<t> operator -(const v2<t> &V) const { return v2<t>(u-V.u, v-V.v); }
+    inline v2<t> operator *(float F)        const { return v2<t>(u*F, v*F); }
+    template <class> friend std::ostream& operator<<(std::ostream s, v2<t>& v);
+};
+
+template <class t> struct v3 {
+    union {
+        struct {t x, y, z;};
+        t raw[3];
+    };
+    v3() : x(0), y(0), z(0) {}
+    v3(t _x, t _y, t _z) : x(_x), y(_y), z(_z) {}
+    inline v3<t> operator ^(const v3<t> &V) const { return v3<t>(y*V.z-z*V.y, z*V.x-x*V.z, x*V.y-y*V.x); }
+    inline v3<t> operator +(const v3<t> &V) const { return v3<t>(x+V.x, y+V.y, z+V.z); }
+    inline v3<t> operator -(const v3<t> &V) const { return v3<t>(x-V.x, y-V.y, z-V.z); }
+    inline v3<t> operator *(float F)        const { return v3<t>(x*F, y*F, z*F); }
+    inline t     operator *(const v3<t> &V) const { return x*V.x + y*V.y + z*V.z; }
+    float norm () const { return std::sqrt(x*x+y*y+z*z); }
+    v3<t> & normalize(t l=1) { *this = (*this)*(l/norm()); return *this; }
+    template <class> friend std::ostream& operator<<(std::ostream& s, v3<t>& v);
+};
+
+typedef v2<float>   v2f;
+typedef v2<int>     v2i;
+typedef v3<float>   v3f;
+typedef v3<int>     v3i;
+
+template <class t> std::ostream& operator<<(std::ostream& s, v2<t>& v) {
+    s << "(" << v.x << ", " << v.y << ")\n";
+    return s;
+}
+
+template <class t> std::ostream& operator<<(std::ostream& s, v3<t>& v) {
+    s << "(" << v.x << ", " << v.y << ", " << v.z << ")\n";
+    return s;
+}
+
+/* OBJ FORMAT*/
+class Model {
+public:
+    Model(const char *filename);
+    ~Model();
+    int num_vertexes();
+    int num_faces();
+    v3f vertex(int index);
+    std::vector<int> face(int index);
+private:
+    std::vector<v3f> vertexes;
+    std::vector<std::vector<int>> faces;
+};
+
+Model::Model(const char *filename) : vertexes(), faces() {
+    std::ifstream in;
+    in.open (filename, std::ifstream::in);
+    if (in.fail()) return;
+    std::string line;
+    while (!in.eof()) {
+        std::getline(in, line);
+        std::istringstream iss(line.c_str());
+        char trash;
+        if (!line.compare(0, 2, "v ")) {
+            iss >> trash;
+            v3f v;
+            for (int i=0; i<3; i++) iss >> v.raw[i];
+            vertexes.push_back(v);
+        } else if (!line.compare(0, 2, "f ")) {
+            std::vector<int> f;
+            int itrash, idx;
+            iss >> trash;
+            while (iss >> idx >> trash >> itrash >> trash >> itrash) {
+                idx--;
+                f.push_back(idx);
+            }
+            faces.push_back(f);
+        }
+    }
+    std::cerr << "# v# " << vertexes.size() << " f# " << faces.size() << std::endl;
+}
+
+Model::~Model() {}
+
+int Model::num_vertexes() {
+    return (int) vertexes.size();
+}
+
+int Model::num_faces() {
+    return (int) faces.size();
+}
+
+std::vector<int> Model::face(int index) {
+    return faces[index];
+}
+
+v3f Model::vertex(int index) {
+    return vertexes[index];
+}
+
 /* TIMER CLASS */
 class Timer {
-    public:
-        Timer();
-        ~Timer();
-        void start();
-        void stop();
-        void pause();
-        void unpause();
-        int get_ticks();
-        bool is_started();
-        bool is_paused();
-    private:
-        int start_ticks;
-        int paused_ticks;
-        bool paused;
-        bool started;
+public:
+    Timer();
+    ~Timer();
+    void start();
+    void stop();
+    void pause();
+    void unpause();
+    int get_ticks();
+    bool is_started();
+    bool is_paused();
+private:
+    int start_ticks;
+    int paused_ticks;
+    bool paused;
+    bool started;
 };
 
 Timer::Timer() {
@@ -104,27 +210,27 @@ bool Timer::is_paused() {
 
 /* TEXTURE CLASSES */
 class Texture {
-    public:
-        Texture();
-        ~Texture();
-        bool load_from_file(std::string path);
-        bool load_from_rendered_text(std::string text, SDL_Color color = WHITE);
-        void free();
-        void set_color(int r, int g, int b); //Uint8
-        void set_blend_mode(SDL_BlendMode blending);
-        void set_alpha(int a); //Uint8
-        void render(int x, int y, SDL_Rect* clip = NULL, double angle = 0.0, SDL_Point* center = nullptr, SDL_RendererFlip flip = SDL_FLIP_NONE);
-        int get_width();
-        int get_height();
-    protected:
-        friend class Tilemap;
-        SDL_Texture* texture;
-        std::string file_path;
-        int width;
-        int height;
-        int gid_offset;
-        int tilewidth;
-        int tileheight;
+public:
+    Texture();
+    ~Texture();
+    bool load_from_file(std::string path);
+    bool load_from_rendered_text(std::string text, SDL_Color color = WHITE);
+    void free();
+    void set_color(int r, int g, int b); //Uint8
+    void set_blend_mode(SDL_BlendMode blending);
+    void set_alpha(int a); //Uint8
+    void render(int x, int y, SDL_Rect* clip = NULL, double angle = 0.0, SDL_Point* center = nullptr, SDL_RendererFlip flip = SDL_FLIP_NONE);
+    int get_width();
+    int get_height();
+protected:
+    friend class Tilemap;
+    SDL_Texture* texture;
+    std::string file_path;
+    int width;
+    int height;
+    int gid_offset;
+    int tilewidth;
+    int tileheight;
 };
 
 Texture::Texture() {
@@ -224,20 +330,20 @@ int Texture::get_height() {
 
 
 class RawTexture: public Texture {
-    public:
-        RawTexture();
-        ~RawTexture();
-        bool initialize(int w, int h);
-        bool lock_texture();
-        bool unlock_texture();
-        bool set(int x, int y, SDL_Color color);
-        void* get_pixels();
-        int get_pitch();
-    protected:
-        void* pixels;
-        int pitch;
-        int format;
-        SDL_PixelFormat* mapping_format;
+public:
+    RawTexture();
+    ~RawTexture();
+    bool initialize(int w, int h);
+    bool lock_texture();
+    bool unlock_texture();
+    bool set(int x, int y, SDL_Color color);
+    void* get_pixels();
+    int get_pitch();
+protected:
+    void* pixels;
+    int pitch;
+    int format;
+    SDL_PixelFormat* mapping_format;
 };
 
 RawTexture::RawTexture() {

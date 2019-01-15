@@ -25,6 +25,8 @@ LIBRARY_PATHS = -LC:\MinGW\lib
 # COMPILER_FLAGS = -w -Wl,-subsystem,windows
 COMPILER_FLAGS = -g
 
+COMPILER_FLAGS_PROF = -ggdb -g -pg -O0
+
 #LINKER_FLAGS specifies the libraries we're linking against
 LINKER_FLAGS = -lmingw32 -lSDL2main -lSDL2 -lSDL2_image -lSDL2_ttf
 
@@ -74,3 +76,6 @@ tilemap:
 
 tiny:
 	$(CC) tiny.cpp $(INCLUDE_PATHS) $(LIBRARY_PATHS) $(COMPILER_FLAGS) $(LINKER_FLAGS) -o tiny
+
+tinyprof:
+	$(CC) tiny.cpp $(INCLUDE_PATHS) $(LIBRARY_PATHS) $(COMPILER_FLAGS_PROF) $(LINKER_FLAGS) -o tiny
