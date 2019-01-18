@@ -14,6 +14,7 @@ CC = g++
 
 #INCLUDE_PATHS specifies the additional include paths we'll need
 INCLUDE_PATHS = -IC:\MinGW\include\SDL2
+INCLUDE_PATHS_GL = -IC:\MinGW\include\GL
 
 #LIBRARY_PATHS specifies the additional library paths we'll need
 LIBRARY_PATHS = -LC:\MinGW\lib
@@ -24,11 +25,11 @@ LIBRARY_PATHS = -LC:\MinGW\lib
 # -Wl,-subsystem,windows gets rid of the console window
 # COMPILER_FLAGS = -w -Wl,-subsystem,windows
 COMPILER_FLAGS = -g
-
 COMPILER_FLAGS_PROF = -ggdb -g -pg -O0
 
 #LINKER_FLAGS specifies the libraries we're linking against
 LINKER_FLAGS = -lmingw32 -lSDL2main -lSDL2 -lSDL2_image -lSDL2_ttf
+LINKER_FLAGS_GL = -lOpenGL32 -lglu32 -lfreeGLUT
 
 #OBJ_NAME specifies the name of our exectuable
 # OBJ_NAME = guess_the_number
@@ -79,3 +80,7 @@ tiny:
 
 tinyprof:
 	$(CC) tiny.cpp $(INCLUDE_PATHS) $(LIBRARY_PATHS) $(COMPILER_FLAGS_PROF) $(LINKER_FLAGS) -o tiny
+
+opengl:
+	$(CC) opengl.cpp $(INCLUDE_PATHS) $(INCLUDE_PATHS_GL) $(LIBRARY_PATHS) $(COMPILER_FLAGS_PROF) $(LINKER_FLAGS) $(LINKER_FLAGS_GL) -o opengl
+
