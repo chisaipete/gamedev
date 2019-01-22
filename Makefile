@@ -26,10 +26,11 @@ LIBRARY_PATHS = -LC:\MinGW\lib
 # COMPILER_FLAGS = -w -Wl,-subsystem,windows
 COMPILER_FLAGS = -g
 COMPILER_FLAGS_PROF = -ggdb -g -pg -O0
+COMPILER_FLAGS_DBUG = -g -o
 
 #LINKER_FLAGS specifies the libraries we're linking against
 LINKER_FLAGS = -lmingw32 -lSDL2main -lSDL2 -lSDL2_image -lSDL2_ttf
-LINKER_FLAGS_GL = -lOpenGL32 -lglu32 -lfreeGLUT
+LINKER_FLAGS_GL = -lOpenGL32 -lglu32
 
 #OBJ_NAME specifies the name of our exectuable
 # OBJ_NAME = guess_the_number
@@ -82,5 +83,7 @@ tinyprof:
 	$(CC) tiny.cpp $(INCLUDE_PATHS) $(LIBRARY_PATHS) $(COMPILER_FLAGS_PROF) $(LINKER_FLAGS) -o tiny
 
 opengl:
-	$(CC) opengl.cpp $(INCLUDE_PATHS) $(INCLUDE_PATHS_GL) $(LIBRARY_PATHS) $(COMPILER_FLAGS_PROF) $(LINKER_FLAGS) $(LINKER_FLAGS_GL) -o opengl
+	$(CC) opengl.cpp $(INCLUDE_PATHS) $(INCLUDE_PATHS_GL) $(LIBRARY_PATHS) $(COMPILER_FLAGS) $(LINKER_FLAGS) $(LINKER_FLAGS_GL) -o opengl
 
+opengl_dbug:
+	$(CC) opengl.cpp $(INCLUDE_PATHS) $(INCLUDE_PATHS_GL) $(LIBRARY_PATHS) $(COMPILER_FLAGS_DBUG) $(LINKER_FLAGS) $(LINKER_FLAGS_GL) -o opengl

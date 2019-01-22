@@ -16,7 +16,6 @@ int main(int argc, char* args[]) {
             // float avgFPS = 0.0;
 
             // fps_timer.start();
-
             SDL_Event event;
 
             //Enable text input

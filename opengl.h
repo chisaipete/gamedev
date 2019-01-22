@@ -58,8 +58,11 @@ GLfloat gCameraX = 0.f, gCameraY = 0.f;
 //The projection scale
 GLfloat gProjectionScale = 1.f;
 
-// Texture gCheckerBoardTexture;
+Texture gCheckerBoardTexture;
 Texture gLoadedTexture;
+Texture gLoadedTextureIrregular;
+Texture gArrowTexture;
+FRect gArrowClips[4];
 
 bool init() {
     bool success = true;
@@ -149,29 +152,54 @@ bool load() {
 
     // model = new Model("res/african_head.obj");
 
-    // // Checkerboard pixels
-    // const int CHECKERBOARD_WIDTH = 128;
-    // const int CHECKERBOARD_HEIGHT = 128;
-    // const int CHECKERBOARD_PIXEL_COUNT = CHECKERBOARD_WIDTH * CHECKERBOARD_HEIGHT;
-    // GLuint checkerBoard[CHECKERBOARD_PIXEL_COUNT];
-    // for (int i = 0; i < CHECKERBOARD_PIXEL_COUNT; ++i) {
-    //     GLubyte* colors = (GLubyte*)&checkerBoard[i];
-    //     if (i/128 & 16 ^ i % 128 & 16) {
-    //         colors[0] = 0xFF;
-    //         colors[1] = 0xFF;
-    //         colors[2] = 0xFF;
-    //         colors[3] = 0xFF;
-    //     } else {
-    //         colors[0] = 0xFF;
-    //         colors[1] = 0x00;
-    //         colors[2] = 0x00;
-    //         colors[3] = 0xFF;
-    //     }
-    // }
-    // if (!gCheckerBoardTexture.load_from_pixels(checkerBoard, CHECKERBOARD_WIDTH, CHECKERBOARD_HEIGHT)) {
-    //     printf("Unable to load checkerboard texture!\n");
-    //     success = false;
-    // }
+    // Checkerboard pixels
+    const int CHECKERBOARD_WIDTH = 128;
+    const int CHECKERBOARD_HEIGHT = 128;
+    const int CHECKERBOARD_PIXEL_COUNT = CHECKERBOARD_WIDTH * CHECKERBOARD_HEIGHT;
+    GLuint checkerBoard[CHECKERBOARD_PIXEL_COUNT];
+    for (int i = 0; i < CHECKERBOARD_PIXEL_COUNT; ++i) {
+        GLubyte* colors = (GLubyte*)&checkerBoard[i];
+        if (i/128 & 16 ^ i % 128 & 16) {
+            colors[0] = 0xFF;
+            colors[1] = 0xFF;
+            colors[2] = 0xFF;
+            colors[3] = 0xFF;
+        } else {
+            colors[0] = 0xFF;
+            colors[1] = 0x00;
+            colors[2] = 0x00;
+            colors[3] = 0xFF;
+        }
+    }
+    if (!gCheckerBoardTexture.load_from_pixels(checkerBoard, CHECKERBOARD_WIDTH, CHECKERBOARD_HEIGHT, CHECKERBOARD_WIDTH, CHECKERBOARD_HEIGHT)) {
+        printf("Unable to load checkerboard texture!\n");
+        success = false;
+    }
+    if (!gLoadedTextureIrregular.load_from_file("res/opengl.png")) {
+        printf("Unable to load texture from file!\n");
+        success = false;
+    }
+    if (!gArrowTexture.load_from_file("res/arrows.png")) {
+        printf("Unable to load texture from file!\n");
+        success = false;
+    } else {
+        gArrowClips[0].x =   0.f;
+        gArrowClips[0].y =   0.f;
+        gArrowClips[0].w = 128.f;
+        gArrowClips[0].h = 128.f;
+        gArrowClips[1].x = 128.f;
+        gArrowClips[1].y =   0.f;
+        gArrowClips[1].w = 128.f;
+        gArrowClips[1].h = 128.f;
+        gArrowClips[2].x =   0.f;
+        gArrowClips[2].y = 128.f;
+        gArrowClips[2].w = 128.f;
+        gArrowClips[2].h = 128.f;
+        gArrowClips[3].x = 128.f;
+        gArrowClips[3].y = 128.f;
+        gArrowClips[3].w = 128.f;
+        gArrowClips[3].h = 128.f;
+    }
     if (!gLoadedTexture.load_from_file("res/texture.png")) {
         printf("Unable to load texture from file!\n");
         success = false;
@@ -198,15 +226,15 @@ void render() {
     //Clear color buffer
     glClear(GL_COLOR_BUFFER_BIT);
 
-    //Calculate centered offsets
-    // GLfloat x = (SCREEN_WIDTH - gCheckerBoardTexture.get_width()) / 2.f;
-    // GLfloat y = (SCREEN_HEIGHT - gCheckerBoardTexture.get_height()) / 2.f;
-    GLfloat x = (SCREEN_WIDTH - gLoadedTexture.get_width()) / 2.f;
-    GLfloat y = (SCREEN_HEIGHT - gLoadedTexture.get_height()) / 2.f;
-
+    //Calculate centered offsets &
     //Render texture
-    // gCheckerBoardTexture.render(x, y);
-    gLoadedTexture.render(x, y);
+    gLoadedTextureIrregular.render((SCREEN_WIDTH-gLoadedTextureIrregular.get_image_width())/2.f, (SCREEN_HEIGHT-gLoadedTextureIrregular.get_image_height())/2.f);
+    gLoadedTexture.render((SCREEN_WIDTH-gLoadedTexture.get_image_width())/2.f, (SCREEN_HEIGHT-gLoadedTexture.get_image_height())/2.f);
+    gCheckerBoardTexture.render((SCREEN_WIDTH-gCheckerBoardTexture.get_image_width())/2.f, (SCREEN_HEIGHT-gCheckerBoardTexture.get_image_height())/2.f);
+    gArrowTexture.render(0.f, 0.f, &gArrowClips[0]);
+    gArrowTexture.render(SCREEN_WIDTH - gArrowClips[1].w, 0.f, &gArrowClips[1]);
+    gArrowTexture.render(0.f, SCREEN_HEIGHT - gArrowClips[2].h, &gArrowClips[2]);
+    gArrowTexture.render(SCREEN_WIDTH - gArrowClips[3].w, SCREEN_HEIGHT - gArrowClips[3].h, &gArrowClips[3]);
 }
 
 void handleKeys(unsigned char key, int x, int y) {
