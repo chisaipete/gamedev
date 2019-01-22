@@ -63,6 +63,7 @@ Texture gLoadedTexture;
 Texture gLoadedTextureIrregular;
 Texture gArrowTexture;
 FRect gArrowClips[4];
+Texture gCircleTexture;
 
 bool init() {
     bool success = true;
@@ -129,6 +130,10 @@ bool initGL() {
     glClearColor(0.f, 0.f, 0.f, 1.f);
     //Enable texturing
     glEnable(GL_TEXTURE_2D);
+    //Set blending
+    glEnable(GL_BLEND);
+    glDisable(GL_DEPTH_TEST); //useful in 3d, not 2d
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     //Check for errors
     error = glGetError();
@@ -171,15 +176,15 @@ bool load() {
             colors[3] = 0xFF;
         }
     }
-    if (!gCheckerBoardTexture.load_from_pixels(checkerBoard, CHECKERBOARD_WIDTH, CHECKERBOARD_HEIGHT, CHECKERBOARD_WIDTH, CHECKERBOARD_HEIGHT)) {
+    if (!gCheckerBoardTexture.load_texture_from_pixels(checkerBoard, CHECKERBOARD_WIDTH, CHECKERBOARD_HEIGHT, CHECKERBOARD_WIDTH, CHECKERBOARD_HEIGHT)) {
         printf("Unable to load checkerboard texture!\n");
         success = false;
     }
-    if (!gLoadedTextureIrregular.load_from_file("res/opengl.png")) {
+    if (!gLoadedTextureIrregular.load_texture_from_file("res/opengl.png")) {
         printf("Unable to load texture from file!\n");
         success = false;
     }
-    if (!gArrowTexture.load_from_file("res/arrows.png")) {
+    if (!gArrowTexture.load_texture_from_file("res/arrows.png")) {
         printf("Unable to load texture from file!\n");
         success = false;
     } else {
@@ -200,14 +205,46 @@ bool load() {
         gArrowClips[3].w = 128.f;
         gArrowClips[3].h = 128.f;
     }
-    if (!gLoadedTexture.load_from_file("res/texture.png")) {
+    if (!gLoadedTexture.load_texture_from_file("res/texture.png")) {
         printf("Unable to load texture from file!\n");
         success = false;
     }
+    if(!gCircleTexture.load_texture_from_file_with_colorkey("res/circle.png", 000, 255, 255)) {
+        printf("Unable to load texture from file!\n");
+        success = false;
+    }
+    // gCircleTexture.lock();
+    // //Calculate target color
+    // GLuint targetColor;
+    // GLubyte* colors = (GLubyte*)&targetColor;
+    // colors[0] = 000;
+    // colors[1] = 255;
+    // colors[2] = 255;
+    // colors[3] = 255;
+    // GLuint* pixels = gCircleTexture.get_pixel_data();
+    // GLuint pixel_count = gCircleTexture.get_width() * gCircleTexture.get_height();
+    // for (int i = 0; i < pixel_count; i++) {
+    //     if (pixels[i] == targetColor) {
+    //         pixels[i] = 0;
+    //     }
+    // }
+    // for (int y = 0; y < gCircleTexture.get_height(); y++) {
+    //     for (int x = 0; x < gCircleTexture.get_width(); x++) {
+    //         if (y % 10 != x % 10) {
+    //             gCircleTexture.set_pixel(x, y, 0);
+    //         }
+    //     }
+    // }
+    // gCircleTexture.unlock();
+
     return success;
 }
 
 bool close() {
+    gLoadedTexture.free();
+    gLoadedTextureIrregular.free();
+    gArrowTexture.free();
+    gCircleTexture.free();
     // t_fps.free();
     // image.free();
     // if (model != nullptr) { delete model; }
@@ -235,6 +272,9 @@ void render() {
     gArrowTexture.render(SCREEN_WIDTH - gArrowClips[1].w, 0.f, &gArrowClips[1]);
     gArrowTexture.render(0.f, SCREEN_HEIGHT - gArrowClips[2].h, &gArrowClips[2]);
     gArrowTexture.render(SCREEN_WIDTH - gArrowClips[3].w, SCREEN_HEIGHT - gArrowClips[3].h, &gArrowClips[3]);
+    glColor4f(1.f, 1.f, 1.f, 0.5f);
+    gCircleTexture.render((SCREEN_WIDTH-gCircleTexture.get_image_width())/2.f, (SCREEN_HEIGHT-gCircleTexture.get_image_height())/2.f);
+    glColor4f(1.f, 1.f, 1.f, 1.f);
 }
 
 void handleKeys(unsigned char key, int x, int y) {

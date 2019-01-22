@@ -229,37 +229,42 @@ class Texture {
 public:
     Texture();
     ~Texture();
-    bool load_from_file(std::string path);
-    bool load_from_file_b(std::string path);
-    bool load_from_pixels(GLuint* pixels, GLuint i_width, GLuint i_height, GLuint t_width, GLuint t_height, int mode);
+    bool load_texture_from_file(std::string path);
+    bool load_texture_from_file_with_colorkey(std::string path, GLubyte r, GLubyte g, GLubyte b, GLubyte a=000);
+    bool load_pixels_from_file(std::string path);
+    bool load_texture_from_pixels(GLuint* pixels, GLuint i_width, GLuint i_height, GLuint t_width, GLuint t_height, int mode);
+    bool load_texture_from_pixels();
     // bool load_from_rendered_text(std::string text, SDL_Color color = WHITE);
     void free();
-    // void set_color(int r, int g, int b); //Uint8
-    // void set_blend_mode(SDL_BlendMode blending);
-    // void set_alpha(int a); //Uint8
-    // void render(int x, int y, SDL_Rect* clip = NULL, double angle = 0.0, SDL_Point* center = nullptr, SDL_RendererFlip flip = SDL_FLIP_NONE);
     void render(GLfloat x, GLfloat y, FRect* clip = NULL);
     GLuint get_texture_id();
     GLuint get_width();
     GLuint get_height();
     GLuint get_image_width();
     GLuint get_image_height();
+    bool lock();
+    bool unlock();
+    GLuint* get_pixel_data();
+    GLuint get_pixel(GLuint x, GLuint y);
+    void set_pixel(GLuint x, GLuint y, GLuint pixel);
 protected:
+    GLuint power_of_two(GLuint number);
     std::string file_path;
     GLuint texture_id;
+    GLuint* pixels;
     GLuint texture_width;
     GLuint texture_height;
     GLuint image_width;
     GLuint image_height;
-    GLuint power_of_two(GLuint number);
 };
 
 Texture::Texture() {
     texture_id = 0;
-    texture_width = 0;
-    texture_height = 0;
+    pixels = nullptr;
     image_width = 0;
     image_height = 0;
+    texture_width = 0;
+    texture_height = 0;
 }
 
 Texture::~Texture() {
@@ -267,16 +272,64 @@ Texture::~Texture() {
 }
 
 void Texture::free() {
-    std::cout << "Freeing texture" << std::endl;
     if (texture_id != 0) {
-        std::cout << "Deleting texture id: " << texture_id << std::endl;
         glDeleteTextures(1, &texture_id);
         texture_id = 0;
     }
-    texture_width = 0;
-    texture_height = 0;
+    if (pixels != nullptr) {
+        delete[] pixels;
+        pixels = nullptr;
+    }
     image_width = 0;
     image_height = 0;
+    texture_width = 0;
+    texture_height = 0;
+}
+
+bool Texture::lock() {
+    //If we have member pixels, it means we've already locked the texture
+    if (pixels == nullptr && texture_id != 0) {
+        //Alloc memory for texture data
+        GLuint size = texture_width * texture_height;
+        pixels = new GLuint[size];
+        //Set current texture
+        glBindTexture(GL_TEXTURE_2D, texture_id);
+        //Get pixels
+        glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+        //Unbind texture
+        glBindTexture(GL_TEXTURE_2D, 0);
+        return true;
+    }
+    return false;
+}
+
+bool Texture::unlock() {
+    //If texture is locked, and it exists
+    if (pixels != nullptr && texture_id != 0) {
+        //Set current texture
+        glBindTexture(GL_TEXTURE_2D, texture_id);
+        //Update texture
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, texture_width, texture_height, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+        //Delete pixels
+        delete[] pixels;
+        pixels = nullptr;
+        //Unbind texture
+        glBindTexture(GL_TEXTURE_2D, 0);
+        return true;
+    }
+    return false;
+}
+
+GLuint* Texture::get_pixel_data() {
+    return pixels;
+}
+
+GLuint Texture::get_pixel(GLuint x, GLuint y) {
+    return pixels[y*texture_width+x];
+}
+
+void Texture::set_pixel(GLuint x, GLuint y, GLuint pixel) {
+    pixels[y*texture_width+x] = pixel;
 }
 
 GLuint Texture::power_of_two(GLuint number) {
@@ -293,22 +346,45 @@ GLuint Texture::power_of_two(GLuint number) {
     return number;
 }
 
-bool Texture::load_from_pixels(GLuint* pixels, GLuint i_width, GLuint i_height, GLuint t_width, GLuint t_height, int mode=GL_RGBA) {
-    std::cout << "Loading from pixel payload" << std::endl;
+bool Texture::load_texture_from_pixels() {  //may have issues with mode?
+    bool success = true;
+    if (texture_id == 0 && pixels != nullptr) {
+        glGenTextures(1, &texture_id);
+        glBindTexture(GL_TEXTURE_2D, texture_id);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texture_width, texture_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        GLenum error = glGetError();
+        if (error != GL_NO_ERROR) { 
+            logGLError(std::cout, "Error loading texture from pixels!", error); 
+            success = false;
+        } else {
+            //release pixels
+            delete[] pixels;
+            pixels = NULL;
+        }
+    } else {
+        std::cout << "Cannot load texture from current pixels! ";
+        if (texture_id != 0) {
+            std::cout << "A texture is already loaded!" << std::endl;
+        } else if (pixels == nullptr) {
+            std::cout << "No pixels to create texture from!" << std::endl;
+        }
+        success = false;
+    }
+    return success;
+}
+
+bool Texture::load_texture_from_pixels(GLuint* pixels, GLuint i_width, GLuint i_height, GLuint t_width, GLuint t_height, int mode=GL_RGBA) {
     bool success = true;
     free();
     image_width = i_width;
     image_height = i_height;
     texture_width = t_width;
     texture_height = t_height;
-
     glGenTextures(1, &texture_id);
     glBindTexture(GL_TEXTURE_2D, texture_id);
-
-    std::cout << image_width << "x" << image_height << " " << texture_width << "x" << texture_height << std::endl;
-    std::cout << texture_id << std::endl;
-    std::cout << pixels << std::endl;
-
     glTexImage2D(GL_TEXTURE_2D, 0, mode, texture_width, texture_height, 0, mode, GL_UNSIGNED_BYTE, pixels);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -321,44 +397,7 @@ bool Texture::load_from_pixels(GLuint* pixels, GLuint i_width, GLuint i_height, 
     return success;
 }
 
-bool Texture::load_from_file_b(std::string path) {
-    std::cout << "Loading from: " << path << std::endl;
-    bool success = true;
-    free();
-    file_path = path;
-    SDL_Surface* lsurface = IMG_Load(path.c_str());
-    if (lsurface == nullptr){
-        logSDLError(std::cout, "IMG_Load");
-    } else {
-        //Create texture from surface
-        glGenTextures(1, &texture_id);
-        glBindTexture(GL_TEXTURE_2D, texture_id);
-
-        int Mode = GL_RGB;
-        if (lsurface->format->BytesPerPixel == 4) {
-            Mode = GL_RGBA;
-        }
-        image_width = lsurface->w;
-        image_height = lsurface->h;
-        texture_width = lsurface->w;
-        texture_height = lsurface->h;
-
-        glTexImage2D(GL_TEXTURE_2D, 0, Mode, image_width, image_height, 0, Mode, GL_UNSIGNED_BYTE, lsurface->pixels);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glBindTexture(GL_TEXTURE_2D, 0);
-        GLenum error = glGetError();
-        if (error != GL_NO_ERROR) { 
-            logGLError(std::cout, "Error loading texture from pixels!", error); 
-            success = false;
-        }
-    }
-    SDL_FreeSurface(lsurface);
-    return success;
-}
-
-bool Texture::load_from_file(std::string path) {
-    std::cout << "Loading from: " << path << std::endl;
+bool Texture::load_texture_from_file(std::string path) {
     bool success = true;
     free();
     file_path = path;
@@ -370,52 +409,98 @@ bool Texture::load_from_file(std::string path) {
         if (lsurface->format->BytesPerPixel == 4) {
             mode = GL_RGBA;
         }
-        if (mode == GL_RGB) {
-            std::cout << "GL_RGB pixel mode detected" << std::endl;
-        } else {
-            std::cout << "GL_RGBA pixel mode detected" << std::endl;
-        }
-
         image_width = lsurface->w;
         image_height = lsurface->h;
         // Calculate texture dimensions needed
         texture_width = power_of_two(image_width);
         texture_height = power_of_two(image_height);
-
-        std::cout << image_width << "x" << image_height << " -> " << texture_width << "x" << texture_height << std::endl;
-
         if (image_width != texture_width || image_height != texture_height) {
-            std::cout << "NOT Power of 2 texture dimensions, loading from new surface" << std::endl;
             // create new surface at desired size
             int bitdepth = 32;
             SDL_Surface* nsurface = SDL_CreateRGBSurfaceWithFormat(0, texture_width, texture_height, bitdepth, SDL_PIXELFORMAT_RGBA32);
             if (nsurface == nullptr) {
                 logSDLError(std::cout, "SDL_CreateRGBSurfaceWithFormat");
             } else {
-                // // paint with fill color: Not sure if needed?
                 if (nsurface->format->BytesPerPixel == 4) {
                     mode = GL_RGBA;
                 }
-                // if (mode == GL_RGB) {
-                //     std::cout << "GL_RGB pixel mode detected" << std::endl;
-                //     SDL_FillRect(nsurface, NULL, SDL_MapRGB(nsurface->format, 255, 255, 0));
-                // } else {
-                //     std::cout << "GL_RGBA pixel mode detected" << std::endl;
-                //     SDL_FillRect(nsurface, NULL, SDL_MapRGBA(nsurface->format, 255, 255, 0, 255));
-                // }
                 // copy first image into new image, at upper leftW
                 int blit = SDL_BlitSurface(lsurface, NULL, nsurface, NULL);
                 if (blit != 0) {
                     logSDLError(std::cout, "Surface load from file blit");
                 }
-                std::cout << nsurface->pixels << std::endl;
-                success = load_from_pixels((GLuint*)nsurface->pixels, image_width, image_height, texture_width, texture_height, mode);
+                success = load_texture_from_pixels((GLuint*)nsurface->pixels, image_width, image_height, texture_width, texture_height, mode);
             }
             SDL_FreeSurface(nsurface);
         } else {
-            std::cout << "Power of 2 texture dimensions, loading from surface" << std::endl;
-            std::cout << lsurface->pixels << std::endl;
-            success = load_from_pixels((GLuint*)lsurface->pixels, image_width, image_height, texture_width, texture_height, mode);
+            success = load_texture_from_pixels((GLuint*)lsurface->pixels, image_width, image_height, texture_width, texture_height, mode);
+        }
+    }
+    SDL_FreeSurface(lsurface);
+    return success;
+}
+
+bool Texture::load_texture_from_file_with_colorkey(std::string path, GLubyte r, GLubyte g, GLubyte b, GLubyte a) {
+    if (!load_pixels_from_file(path)) {
+        return false;
+    }
+    GLuint size = texture_width * texture_height;
+    for (int i = 0; i < size; i++) {
+        GLubyte* colors = (GLubyte*)&pixels[i];
+        if(colors[0] == r && colors[1] == g && colors[2] == b && (0 == a || colors[3] == a)) {
+            // make transparent
+            colors[0] = 255;
+            colors[1] = 255;
+            colors[2] = 255;
+            colors[3] = 000;
+        }
+    }
+    return load_texture_from_pixels();
+}
+
+bool Texture::load_pixels_from_file(std::string path) {
+    bool success = true;
+    free();
+    file_path = path;
+    SDL_Surface* lsurface = IMG_Load(path.c_str());
+    if (lsurface == nullptr){
+        logSDLError(std::cout, "IMG_Load");
+    } else {
+        int mode = GL_RGB;
+        if (lsurface->format->BytesPerPixel == 4) {
+            mode = GL_RGBA;
+        }
+        image_width = lsurface->w;
+        image_height = lsurface->h;
+        // Calculate texture dimensions needed
+        texture_width = power_of_two(image_width);
+        texture_height = power_of_two(image_height);
+
+        GLuint size = texture_width * texture_height;
+        pixels = new GLuint[size];
+
+        if (image_width != texture_width || image_height != texture_height) {
+            // create new surface at desired size
+            int bitdepth = 32;
+            SDL_Surface* nsurface = SDL_CreateRGBSurfaceWithFormat(0, texture_width, texture_height, bitdepth, SDL_PIXELFORMAT_RGBA32);
+            if (nsurface == nullptr) {
+                logSDLError(std::cout, "SDL_CreateRGBSurfaceWithFormat");
+            } else {
+                if (nsurface->format->BytesPerPixel == 4) {
+                    mode = GL_RGBA;
+                }
+                // copy first image into new image, at upper leftW
+                int blit = SDL_BlitSurface(lsurface, NULL, nsurface, NULL);
+                if (blit != 0) {
+                    logSDLError(std::cout, "Surface load from file blit");
+                }
+                memcpy(pixels, (GLuint*)nsurface->pixels, size * nsurface->format->BytesPerPixel);
+                success = true;
+            }
+            SDL_FreeSurface(nsurface);
+        } else {
+            memcpy(pixels, (GLuint*)lsurface->pixels, size * lsurface->format->BytesPerPixel);
+            success = true;
         }
     }
     SDL_FreeSurface(lsurface);
