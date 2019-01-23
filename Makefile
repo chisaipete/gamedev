@@ -30,7 +30,7 @@ COMPILER_FLAGS_DBUG = -g -o
 
 #LINKER_FLAGS specifies the libraries we're linking against
 LINKER_FLAGS = -lmingw32 -lSDL2main -lSDL2 -lSDL2_image -lSDL2_ttf
-LINKER_FLAGS_GL = -lOpenGL32 -lglu32
+LINKER_FLAGS_GL = -lOpenGL32 -lglu32 -lglew32
 
 #OBJ_NAME specifies the name of our exectuable
 # OBJ_NAME = guess_the_number

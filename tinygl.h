@@ -1,18 +1,20 @@
 #include <iostream>
 #include <sstream>
+#include <stdio.h>
 #include <string>
 #include <fstream>
 #include <cstdlib>
-// #include <ctime>
 #include <cmath>
-// #include <algorithm>
 #include <vector>
 #include <SDL.h>
+#include <GL\glew.h>
 #include <SDL_opengl.h>
 #include <GL\GLU.h>
 #include <SDL_timer.h>
 #include <SDL_image.h>
 #include <SDL_ttf.h>
+// #include <ctime>
+// #include <algorithm>
 
 extern SDL_Window* window;
 TTF_Font* font;
@@ -31,18 +33,19 @@ SDL_Color GREEN = {  0,255,  0,255};
 SDL_Color RED   = {255,  0,  0,255};
 
 /* VECTORS */
-template <class t> struct v2 {
+template <class T> struct v2 {
     union {
-        struct {t u, v;};
-        struct {t x, y;};
-        t raw[2];
+        struct {T u, v;};
+        struct {T x, y;};
+        struct {T s, t;};
+        T raw[2];
     };
     v2() : u(0), v(0) {}
-    v2(t _u, t _v) : u(_u), v(_v) {}
-    inline v2<t> operator +(const v2<t> &V) const { return v2<t>(u+V.u, v+V.v); }
-    inline v2<t> operator -(const v2<t> &V) const { return v2<t>(u-V.u, v-V.v); }
-    inline v2<t> operator *(float F)        const { return v2<t>(u*F, v*F); }
-    template <class> friend std::ostream& operator<<(std::ostream s, v2<t>& v);
+    v2(T _u, T _v) : u(_u), v(_v) {}
+    inline v2<T> operator +(const v2<T> &V) const { return v2<T>(u+V.u, v+V.v); }
+    inline v2<T> operator -(const v2<T> &V) const { return v2<T>(u-V.u, v-V.v); }
+    inline v2<T> operator *(float F)        const { return v2<T>(u*F, v*F); }
+    template <class> friend std::ostream& operator<<(std::ostream s, v2<T>& v);
 };
 
 template <class t> struct v3 {
@@ -62,7 +65,9 @@ template <class t> struct v3 {
     template <class> friend std::ostream& operator<<(std::ostream& s, v3<t>& v);
 };
 
-typedef v2<float>   v2f;
+typedef v2<GLfloat>   v2f;
+typedef v2<GLfloat>   t2f;
+// typedef v2<float>   v2f;
 typedef v2<int>     v2i;
 typedef v3<float>   v3f;
 typedef v3<int>     v3i;
@@ -225,6 +230,8 @@ bool Timer::is_paused() {
 }
 
 /* TEXTURE CLASSES */
+GLenum DEFAULT_TEXTURE_WRAP = GL_REPEAT;
+
 class Texture {
 public:
     Texture();
@@ -236,7 +243,7 @@ public:
     bool load_texture_from_pixels();
     // bool load_from_rendered_text(std::string text, SDL_Color color = WHITE);
     void free();
-    void render(GLfloat x, GLfloat y, FRect* clip = NULL);
+    void render(GLfloat x, GLfloat y, FRect* clip = nullptr);
     GLuint get_texture_id();
     GLuint get_width();
     GLuint get_height();
@@ -354,6 +361,8 @@ bool Texture::load_texture_from_pixels() {  //may have issues with mode?
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texture_width, texture_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, DEFAULT_TEXTURE_WRAP);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, DEFAULT_TEXTURE_WRAP);
         glBindTexture(GL_TEXTURE_2D, 0);
         GLenum error = glGetError();
         if (error != GL_NO_ERROR) { 
@@ -388,6 +397,8 @@ bool Texture::load_texture_from_pixels(GLuint* pixels, GLuint i_width, GLuint i_
     glTexImage2D(GL_TEXTURE_2D, 0, mode, texture_width, texture_height, 0, mode, GL_UNSIGNED_BYTE, pixels);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, DEFAULT_TEXTURE_WRAP);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, DEFAULT_TEXTURE_WRAP);
     glBindTexture(GL_TEXTURE_2D, 0);
     GLenum error = glGetError();
     if (error != GL_NO_ERROR) { 
@@ -527,23 +538,22 @@ bool Texture::load_pixels_from_file(std::string path) {
 
 void Texture::render(GLfloat x, GLfloat y, FRect* clip) {
     if (texture_id != 0) {
-        glLoadIdentity();
         //Texture coordinates
-        GLfloat t_top = 0.f;
-        GLfloat t_bottom = (GLfloat)image_height / (GLfloat)texture_height;
-        GLfloat t_left = 0.f;
-        GLfloat t_right = (GLfloat)image_width / (GLfloat)texture_width;
+        GLfloat texture_top = 0.f;
+        GLfloat texture_bottom = (GLfloat)image_height / (GLfloat)texture_height;
+        GLfloat texture_left = 0.f;
+        GLfloat texture_right = (GLfloat)image_width / (GLfloat)texture_width;
         //Vertex coordinates
-        GLfloat q_width = image_width;
-        GLfloat q_height = image_height;
-        //Handle texture clipping
-        if (clip != NULL) {
-            t_left = clip->x / texture_width;
-            t_right = (clip->x + clip->w) / texture_width;
-            t_top = clip->y / texture_height;
-            t_bottom = (clip->y + clip->h) / texture_height;
-            q_width = clip->w;
-            q_height = clip->h;
+        GLfloat quad_width = image_width;
+        GLfloat quad_height = image_height;
+        //Handle clipping
+        if (clip != nullptr) {
+            texture_left = clip->x / texture_width;
+            texture_right = (clip->x + clip->w) / texture_width;
+            texture_top = clip->y / texture_height;
+            texture_bottom = (clip->y + clip->h) / texture_height;
+            quad_width = clip->w;
+            quad_height = clip->h;
         }
         //Move to rendering point
         glTranslatef(x, y, 0.f);
@@ -551,10 +561,10 @@ void Texture::render(GLfloat x, GLfloat y, FRect* clip) {
         glBindTexture(GL_TEXTURE_2D, texture_id);
         //Render textured quad
         glBegin( GL_QUADS );
-            glTexCoord2f( t_left,    t_top); glVertex2f(    0.f,      0.f);
-            glTexCoord2f(t_right,    t_top); glVertex2f(q_width,      0.f);
-            glTexCoord2f(t_right, t_bottom); glVertex2f(q_width, q_height);
-            glTexCoord2f( t_left, t_bottom); glVertex2f(    0.f, q_height);
+            glTexCoord2f( texture_left,    texture_top); glVertex2f(       0.f,         0.f);
+            glTexCoord2f(texture_right,    texture_top); glVertex2f(quad_width,         0.f);
+            glTexCoord2f(texture_right, texture_bottom); glVertex2f(quad_width, quad_height);
+            glTexCoord2f( texture_left, texture_bottom); glVertex2f(       0.f, quad_height);
         glEnd();
     }
 }

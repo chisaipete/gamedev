@@ -38,7 +38,7 @@ int main(int argc, char* args[]) {
                         // }
                     }
                 }
-
+                update();
                 render();
 
                 // SDL_SetRenderDrawColor(renderer, BLACK.r, BLACK.g, BLACK.b, BLACK.a); //black
