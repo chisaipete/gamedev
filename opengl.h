@@ -47,10 +47,7 @@ void handleKeys(unsigned char key, int x, int y);
 
 /* ----------------------------------------------------- */
 
-v2f gQuadVertices[4];
-GLuint gIndices[4];
-GLuint gVertexBuffer = 0;
-GLuint gIndexBuffer = 0;
+Font gFont;
 
 bool init() {
     bool success = true;
@@ -154,34 +151,10 @@ bool load() {
 
     // model = new Model("res/african_head.obj");
 
-    //Set quad verticies
-    gQuadVertices[0].x = SCREEN_WIDTH * 1.f / 4.f;
-    gQuadVertices[0].y = SCREEN_HEIGHT * 1.f / 4.f;
-
-    gQuadVertices[1].x = SCREEN_WIDTH * 3.f / 4.f;
-    gQuadVertices[1].y = SCREEN_HEIGHT * 1.f / 4.f;
-
-    gQuadVertices[2].x = SCREEN_WIDTH * 3.f / 4.f;
-    gQuadVertices[2].y = SCREEN_HEIGHT * 3.f / 4.f;
-
-    gQuadVertices[3].x = SCREEN_WIDTH * 1.f / 4.f;
-    gQuadVertices[3].y = SCREEN_HEIGHT * 3.f / 4.f;
-
-    //Set rendering indices
-    gIndices[0] = 0;
-    gIndices[1] = 1;
-    gIndices[2] = 2;
-    gIndices[3] = 3;
-
-    //Create VBO
-    glGenBuffers(1, &gVertexBuffer);
-    glBindBuffer(GL_ARRAY_BUFFER, gVertexBuffer);
-    glBufferData(GL_ARRAY_BUFFER, 4*sizeof(v2f), gQuadVertices, GL_STATIC_DRAW);
-
-    //Create IBO
-    glGenBuffers(1, &gIndexBuffer);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gIndexBuffer);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, 4*sizeof(GLuint), gIndices, GL_STATIC_DRAW);
+    if (!gFont.load_bitmap("res/lazy_font.png")) {
+        printf("Unable to load bitmap font!\n");
+        success = false;
+    }
 
     return success;
 }
@@ -203,16 +176,10 @@ void update() {
 void render() {
     //Clear color buffer
     glClear(GL_COLOR_BUFFER_BIT);
+    glLoadIdentity();
 
-    //Enable vertex arrays
-    glEnableClientState(GL_VERTEX_ARRAY);
-        //Set vertex data 
-        glBindBuffer(GL_ARRAY_BUFFER, gVertexBuffer);
-        glVertexPointer(2, GL_FLOAT, 0, NULL);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gIndexBuffer);
-        glDrawElements(GL_QUADS, 4, GL_UNSIGNED_INT, NULL);
-    //Disable vertex arrays
-    glDisableClientState(GL_VERTEX_ARRAY);
+    glColor3f(1.f, 0.f, 0.f);
+    gFont.render_text(0.f, 0.f, "The quick brown fox jumps\nover the lazy dog");
 }
 
 void handleKeys(unsigned char key, int x, int y) {

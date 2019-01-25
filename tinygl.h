@@ -82,6 +82,11 @@ template <class t> std::ostream& operator<<(std::ostream& s, v3<t>& v) {
     return s;
 }
 
+struct VertexData2D {
+    v2f position;
+    t2f texture_coordinate;
+};
+
 /* OPENGL THINGS */
 
 struct FRect {
@@ -235,14 +240,14 @@ GLenum DEFAULT_TEXTURE_WRAP = GL_REPEAT;
 class Texture {
 public:
     Texture();
-    ~Texture();
+    virtual ~Texture();
     bool load_texture_from_file(std::string path);
     bool load_texture_from_file_with_colorkey(std::string path, GLubyte r, GLubyte g, GLubyte b, GLubyte a=000);
     bool load_pixels_from_file(std::string path);
     bool load_texture_from_pixels(GLuint* pixels, GLuint i_width, GLuint i_height, GLuint t_width, GLuint t_height, int mode);
     bool load_texture_from_pixels();
     // bool load_from_rendered_text(std::string text, SDL_Color color = WHITE);
-    void free();
+    virtual void free_texture();
     void render(GLfloat x, GLfloat y, FRect* clip = nullptr);
     GLuint get_texture_id();
     GLuint get_width();
@@ -256,6 +261,8 @@ public:
     void set_pixel(GLuint x, GLuint y, GLuint pixel);
 protected:
     GLuint power_of_two(GLuint number);
+    void init_VBO();
+    void free_VBO();
     std::string file_path;
     GLuint texture_id;
     GLuint* pixels;
@@ -263,6 +270,8 @@ protected:
     GLuint texture_height;
     GLuint image_width;
     GLuint image_height;
+    GLuint VBO_id;
+    GLuint IBO_id;
 };
 
 Texture::Texture() {
@@ -272,13 +281,16 @@ Texture::Texture() {
     image_height = 0;
     texture_width = 0;
     texture_height = 0;
+    VBO_id = 0;
+    IBO_id = 0;
 }
 
 Texture::~Texture() {
-    free();
+    free_texture();
+    free_VBO();
 }
 
-void Texture::free() {
+void Texture::free_texture() {
     if (texture_id != 0) {
         glDeleteTextures(1, &texture_id);
         texture_id = 0;
@@ -327,6 +339,37 @@ bool Texture::unlock() {
     return false;
 }
 
+void Texture::init_VBO() {
+    //texture loaded and VBO doesn't exist
+    if (texture_id != 0 && VBO_id == 0) {
+        //Vertex data
+        VertexData2D vertex_data [4];
+        GLuint index_data[4];
+        //set rendering indicies
+        index_data[0] = 0;
+        index_data[1] = 1;
+        index_data[2] = 2;
+        index_data[3] = 3;
+        //Create VBO
+        glGenBuffers(1, &VBO_id);
+        glBindBuffer(GL_ARRAY_BUFFER, VBO_id);
+        glBufferData(GL_ARRAY_BUFFER, 4*sizeof(VertexData2D), vertex_data, GL_DYNAMIC_DRAW);
+        //Create IBO
+        glGenBuffers(1, &IBO_id);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, IBO_id);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, 4*sizeof(GLfloat), index_data, GL_DYNAMIC_DRAW);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    }
+}
+
+void Texture::free_VBO() {
+    if (VBO_id != 0) {
+        glDeleteBuffers(1, &VBO_id);
+        glDeleteBuffers(1, &IBO_id);
+    }
+}
+
 GLuint* Texture::get_pixel_data() {
     return pixels;
 }
@@ -372,6 +415,8 @@ bool Texture::load_texture_from_pixels() {  //may have issues with mode?
             //release pixels
             delete[] pixels;
             pixels = NULL;
+            //Generate VBO - I added this call...
+            init_VBO();
         }
     } else {
         std::cout << "Cannot load texture from current pixels! ";
@@ -387,7 +432,7 @@ bool Texture::load_texture_from_pixels() {  //may have issues with mode?
 
 bool Texture::load_texture_from_pixels(GLuint* pixels, GLuint i_width, GLuint i_height, GLuint t_width, GLuint t_height, int mode=GL_RGBA) {
     bool success = true;
-    free();
+    free_texture();
     image_width = i_width;
     image_height = i_height;
     texture_width = t_width;
@@ -405,12 +450,14 @@ bool Texture::load_texture_from_pixels(GLuint* pixels, GLuint i_width, GLuint i_
         logGLError(std::cout, "Error loading texture from pixels!", error); 
         success = false;
     }
+    //Generate VBO
+    init_VBO();
     return success;
 }
 
 bool Texture::load_texture_from_file(std::string path) {
     bool success = true;
-    free();
+    free_texture();
     file_path = path;
     SDL_Surface* lsurface = IMG_Load(path.c_str());
     if (lsurface == nullptr){
@@ -471,7 +518,7 @@ bool Texture::load_texture_from_file_with_colorkey(std::string path, GLubyte r, 
 
 bool Texture::load_pixels_from_file(std::string path) {
     bool success = true;
-    free();
+    free_texture();
     file_path = path;
     SDL_Surface* lsurface = IMG_Load(path.c_str());
     if (lsurface == nullptr){
@@ -519,7 +566,7 @@ bool Texture::load_pixels_from_file(std::string path) {
 }
 
 // bool Texture::load_from_rendered_text(std::string text, SDL_Color color) {
-//     free();
+//     free_texture();
 //     SDL_Surface* surf = TTF_RenderText_Blended(font, text.c_str(), color);
 //     if (surf == nullptr){
 //         logSDLError(std::cout, "TTF_RenderText");
@@ -557,15 +604,37 @@ void Texture::render(GLfloat x, GLfloat y, FRect* clip) {
         }
         //Move to rendering point
         glTranslatef(x, y, 0.f);
+        //Set vertex data
+        VertexData2D vertex_data[4];
+        //Texture coordinates
+        vertex_data[0].texture_coordinate.s =  texture_left; vertex_data[0].texture_coordinate.t =    texture_top;
+        vertex_data[1].texture_coordinate.s = texture_right; vertex_data[1].texture_coordinate.t =    texture_top;
+        vertex_data[2].texture_coordinate.s = texture_right; vertex_data[2].texture_coordinate.t = texture_bottom;
+        vertex_data[3].texture_coordinate.s =  texture_left; vertex_data[3].texture_coordinate.t = texture_bottom;
+        //Vertex positions
+        vertex_data[0].position.x =        0.f; vertex_data[0].position.y =         0.f;        
+        vertex_data[1].position.x = quad_width; vertex_data[1].position.y =         0.f;        
+        vertex_data[2].position.x = quad_width; vertex_data[2].position.y = quad_height;        
+        vertex_data[3].position.x =        0.f; vertex_data[3].position.y = quad_height;        
         //Set texture ID
         glBindTexture(GL_TEXTURE_2D, texture_id);
-        //Render textured quad
-        glBegin( GL_QUADS );
-            glTexCoord2f( texture_left,    texture_top); glVertex2f(       0.f,         0.f);
-            glTexCoord2f(texture_right,    texture_top); glVertex2f(quad_width,         0.f);
-            glTexCoord2f(texture_right, texture_bottom); glVertex2f(quad_width, quad_height);
-            glTexCoord2f( texture_left, texture_bottom); glVertex2f(       0.f, quad_height);
-        glEnd();
+        //Enable vertex and texture coordinate arrays
+        glEnableClientState(GL_VERTEX_ARRAY);
+        glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+        //Bind vertex buffer
+        glBindBuffer(GL_ARRAY_BUFFER, VBO_id);
+        //Update vertex buffer data
+        glBufferSubData(GL_ARRAY_BUFFER, 0, 4*sizeof(VertexData2D), vertex_data);
+        //Set texture coordinate data
+        glTexCoordPointer(2, GL_FLOAT, sizeof(VertexData2D), (GLvoid*)offsetof(VertexData2D, texture_coordinate));
+        //Set vertex data
+        glVertexPointer(2, GL_FLOAT, sizeof(VertexData2D), (GLvoid*)offsetof(VertexData2D, position));
+        //Draw quad using vertex data and index data
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, IBO_id);
+        glDrawElements(GL_QUADS, 4, GL_UNSIGNED_INT, NULL);
+        //Disable Vertex and texture coordinate arrays
+        glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+        glDisableClientState(GL_VERTEX_ARRAY);
     }
 }
 
@@ -587,4 +656,318 @@ GLuint Texture::get_image_width() {
 
 GLuint Texture::get_image_height() {
     return image_height;
+}
+
+
+enum SpriteOrigin {
+    SPRITE_ORIGIN_CENTER,
+    SPRITE_ORIGIN_TOP_LEFT,
+    SPRITE_ORIGIN_BOTTOM_LEFT,
+    SPRITE_ORIGIN_TOP_RIGHT,
+    SPRITE_ORIGIN_BOTTOM_RIGHT
+};
+
+class SpriteSheet : public Texture {
+public:
+    SpriteSheet();
+    ~SpriteSheet();
+    int add_sprite_clip(FRect& new_clip);
+    FRect get_clip(int index);
+    bool generate_data_buffer(SpriteOrigin = SPRITE_ORIGIN_CENTER);
+    void free_sheet();
+    void free_texture();
+    void render_sprite(int index);
+protected:
+    std::vector<FRect> clips;
+    GLuint vertex_data_buffer;
+    GLuint* index_buffers;
+};
+
+SpriteSheet::SpriteSheet() {
+    vertex_data_buffer = (GLuint)NULL;
+    index_buffers = NULL;
+}
+
+SpriteSheet::~SpriteSheet() {
+    free_sheet();
+}
+
+int SpriteSheet::add_sprite_clip(FRect& new_clip) {
+    clips.push_back(new_clip);
+    return clips.size() - 1;
+}
+
+FRect SpriteSheet::get_clip(int index) {
+    return clips[index];
+}
+
+bool SpriteSheet::generate_data_buffer(SpriteOrigin origin) {
+    if (get_texture_id() != 0 && clips.size() > 0) {
+        int total_sprites = clips.size();
+        VertexData2D* vertex_data = new VertexData2D[total_sprites*4];
+        index_buffers = new GLuint[total_sprites];
+        glGenBuffers(1, &vertex_data_buffer);
+        glGenBuffers(total_sprites, index_buffers);
+        GLfloat tex_width = get_width();
+        GLfloat tex_height = get_height();
+        GLuint sprite_indicies[4] = {0,0,0,0};
+        //for origin calculation
+        GLfloat vertex_top = 0.f;
+        GLfloat vertex_bottom = 0.f;
+        GLfloat vertex_left = 0.f;
+        GLfloat vertex_right = 0.f;
+        for (int i = 0; i < total_sprites; i++) {
+            sprite_indicies[0] = i*4+0;
+            sprite_indicies[1] = i*4+1;
+            sprite_indicies[2] = i*4+2;
+            sprite_indicies[3] = i*4+3;
+            //set origin
+            switch (origin) {
+                case SPRITE_ORIGIN_TOP_LEFT:
+                    vertex_top = 0.f;
+                    vertex_bottom = clips[i].h;
+                    vertex_left = 0.f;
+                    vertex_right = clips[i].w;
+                    break;
+                case SPRITE_ORIGIN_TOP_RIGHT:
+                    vertex_top = 0.f;
+                    vertex_bottom = clips[i].h;
+                    vertex_left = -clips[i].w;
+                    vertex_right = 0.f;
+                    break;
+                case SPRITE_ORIGIN_BOTTOM_LEFT:
+                    vertex_top = -clips[i].h;
+                    vertex_bottom = 0.f;
+                    vertex_left = 0.f;
+                    vertex_right = clips[i].w;
+                    break;
+                case SPRITE_ORIGIN_BOTTOM_RIGHT:
+                    vertex_top = -clips[i].h;
+                    vertex_bottom = 0.f;
+                    vertex_left = -clips[i].w;
+                    vertex_right = 0.f;
+                    break;
+                default: //SPRITE_ORIGIN_CENTER
+                    vertex_top = -clips[i].h / 2.f;
+                    vertex_bottom = clips[i].h / 2.f;
+                    vertex_left = -clips[i].w / 2.f;
+                    vertex_right = clips[i].w / 2.f;
+                    break;
+            }
+            vertex_data[sprite_indicies[0]].position.x = vertex_left;
+            vertex_data[sprite_indicies[0]].position.y = vertex_top;
+            vertex_data[sprite_indicies[0]].texture_coordinate.s = (clips[i].x) / tex_width;
+            vertex_data[sprite_indicies[0]].texture_coordinate.t = (clips[i].y) / tex_height;
+            vertex_data[sprite_indicies[1]].position.x = vertex_right;
+            vertex_data[sprite_indicies[1]].position.y = vertex_top;
+            vertex_data[sprite_indicies[1]].texture_coordinate.s = (clips[i].x + clips[i].w) / tex_width;
+            vertex_data[sprite_indicies[1]].texture_coordinate.t = (clips[i].y) / tex_height;
+            vertex_data[sprite_indicies[2]].position.x = vertex_right;
+            vertex_data[sprite_indicies[2]].position.y = vertex_bottom;
+            vertex_data[sprite_indicies[2]].texture_coordinate.s = (clips[i].x + clips[i].w) / tex_width;
+            vertex_data[sprite_indicies[2]].texture_coordinate.t = (clips[i].y + clips[i].h) / tex_height;
+            vertex_data[sprite_indicies[3]].position.x = vertex_left;
+            vertex_data[sprite_indicies[3]].position.y = vertex_bottom;
+            vertex_data[sprite_indicies[3]].texture_coordinate.s = (clips[i].x) / tex_width;
+            vertex_data[sprite_indicies[3]].texture_coordinate.t = (clips[i].y + clips[i].h) / tex_height;
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, index_buffers[i]);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, 4*sizeof(GLuint), sprite_indicies, GL_STATIC_DRAW);
+        }
+        glBindBuffer(GL_ARRAY_BUFFER, vertex_data_buffer);
+        glBufferData(GL_ARRAY_BUFFER, total_sprites*4*sizeof(VertexData2D), vertex_data, GL_STATIC_DRAW);
+        delete[] vertex_data;
+    } else {
+        if (get_texture_id() == 0) {
+            printf("No texture to render with!\n");
+        }
+        if (clips.size() <= 0) {
+            printf("No clips to generate vertex data from!\n");
+        }
+        return false;
+    }
+    return true;
+}
+
+void SpriteSheet::free_sheet() {
+    if (vertex_data_buffer != (GLuint)NULL) {
+        glDeleteBuffers(1, &vertex_data_buffer);
+        vertex_data_buffer = (GLuint)NULL;
+    }
+    if (index_buffers != NULL) {
+        glDeleteBuffers(clips.size(), index_buffers);
+        delete[] index_buffers;
+        index_buffers = NULL;
+    }
+    clips.clear();
+}
+
+void SpriteSheet::free_texture() {
+    free_sheet();
+    Texture::free_texture();
+}
+
+void SpriteSheet::render_sprite(int index) {
+    if (vertex_data_buffer != (GLuint)NULL) {
+        glBindTexture(GL_TEXTURE_2D, get_texture_id());
+        glEnableClientState(GL_VERTEX_ARRAY);
+        glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+            glBindBuffer(GL_ARRAY_BUFFER, vertex_data_buffer);
+            glTexCoordPointer(2, GL_FLOAT, sizeof(VertexData2D), (GLvoid*)offsetof(VertexData2D, texture_coordinate));
+            glVertexPointer(2, GL_FLOAT, sizeof(VertexData2D), (GLvoid*)offsetof(VertexData2D, position));
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, index_buffers[index]);
+            glDrawElements(GL_QUADS, 4, GL_UNSIGNED_INT, NULL);
+        glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+        glDisableClientState(GL_VERTEX_ARRAY);
+    }
+}
+
+
+class Font : private SpriteSheet {
+public:
+    Font();
+    ~Font();
+    bool load_bitmap(std::string path);
+    void free_font();
+    void render_text(GLfloat x, GLfloat y, std::string text);
+private:
+    GLfloat space;
+    GLfloat line_height;
+    GLfloat new_line;
+}
+
+Font::Font() {
+    space = 0.f;
+    line_height = 0.f;
+    new_line = 0.f;
+}
+
+Font::~Font() {
+    free_font();
+}
+
+void Font::free_font() {
+    free_texture();
+    space = 0.f;
+    line_height = 0.f;
+    new_line = 0.f;
+}
+
+Font::load_bitmap(std::string path) {
+    //expects path to bitmap font image with black, white, shades of grey, black is background color
+    //arranged in 16x16 grid in ASCII order
+    bool success = true;
+    const GLuint BLACK_PIXEL = 0xFF000000;
+    free_font();
+    if (load_pixels_from_file(path)) {
+        //cell dimensions
+        GLfloat cell_width = get_image_width() / 16.f;
+        GLfloat cell_width = get_image_height() / 16.f;
+        //letter top and bottom
+        GLuint top = cell_height;
+        GLuint bottom = 0;
+        GLuint A_bottom = 0;
+        //current pixel coordinates
+        int pixel_x = 0;
+        int pixel_y = 0;
+        //base cell offsets
+        int base_offset_x = 0;
+        int base_offset_y = 0;
+        //parsing bitmap
+        GLuint current_char = 0;
+        FRect next_clip = {0.f, 0.f, cell_width, cell_height};
+        //iterate cell rows
+        for (unsigned int rows = 0; rows < 16; rows++) {
+            for (unsigned int columns = 0; columns < 16; columns++) {
+                //parsing cell
+                base_offset_x = cell_width * columns;
+                base_offset_y = cell_height * rows;
+                next_clip.x = cell_width * columns;
+                next_clip.y = cell_height * rows;
+                next_clip.w = cell_width;
+                next_clip.h = cell_height;
+
+                //find left side of character
+                for (int pixel_column = 0; pixel_column < cell_width; pixel_column++) {
+                    for (int pixel_row = 0; pixel_row < cell_height; pixel_row++) {
+                        pixel_x = base_offset_x + pixel_column;
+                        pixel_y = base_offset_y + pixel_row;
+                        if (get_pixel(pixel_x, pixel_y) != BLACK_PIXEL) {
+                            // set sprite x offset
+                            next_clip.x = pixel_x;
+                            // break loop
+                            pixel_column = cell_width;
+                            pixel_row = cell_height;
+                        } 
+                    }
+                }
+                //find right side of character (width)
+                for (int pixel_column_width = cell_width - 1; pixel_column_width >= 0; pixel_column_width--) {
+                    for (int pixel_row_width = 0; pixel_row_width < cell_height; pixel_row_width++) {
+                        pixel_x = base_offset_x + pixel_column_width;
+                        pixel_y = base_offset_y + pixel_row_width;
+                        if (get_pixel(pixel_x, pixel_y) != BLACK_PIXEL) {
+                            // set sprite width
+                            next_clip.w = (pixel_x - next_clip.x) + 1;
+                            // break loop
+                            pixel_column_width = -1;
+                            pixel_row_width = cell_height;
+                        } 
+                    }
+                }
+                //find top side of character
+                for (int pixel_row = 0; pixel_row < cell_height; pixel_row++) {
+                    for (int pixel_column = 0; pixel_column < cell_width; pixel_column++) {
+                        pixel_x = base_offset_x + pixel_column;
+                        pixel_y = base_offset_y + pixel_row;
+                        if (get_pixel(pixel_x, pixel_y) != BLACK_PIXEL) {
+                            // new top found
+                            if (pixel_row < top) {
+                                top = pixel_row;
+                            }
+                            //break loops
+                            pixel_column = cell_width;
+                            pixel_row = cell_height;
+                        } 
+                    }
+                }
+                //find bottom side of character (height) and baseline A
+                for (int pixel_row_base = cell_height - 1; pixel_row_base >= 0; pixel_row_base--) {
+                    for (int pixel_column_base = 0; pixel_column_base < cell_width; pixel_column_base++) {
+                        pixel_x = base_offset_x + pixel_column_base;
+                        pixel_y = base_offset_y + pixel_row_base;
+                        if (get_pixel(pixel_x, pixel_y) != BLACK_PIXEL) {
+                            // set baseline
+                            if (current_char == 'A') {
+                                A_bottom = pixel_row_base;
+                            }
+                            // new bottom
+                            if (pixel_row_base > bottom) {
+                                bottom = pixel_row_base;
+                            }
+                            // break loop
+                            pixel_column_base = cell_width;
+                            pixel_row_base = -1;
+                        } 
+                    }
+                }
+                clips.push_back(next_clip);
+                current_char++;
+            }
+        }
+        //trip excess height from top of fonts
+        for (int t = 0; t < 256; t++) {
+            clips[t].y += top;
+            clips[t].h -= top;
+        }
+        //Blend
+        HERE
+    } else {
+        printf("Could not load bitmap font image: %s!\n", path.c_str());
+        success = false;
+    }
+    return success;
+}
+
+void Font::render_text(GLfloat x, GLfloat y, std::string text) {
+
 }
