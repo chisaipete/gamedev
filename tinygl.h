@@ -7,7 +7,7 @@
 #include <cmath>
 #include <vector>
 #include <SDL.h>
-#include <GL\glew.h>
+#include <glew.h>
 #include <SDL_opengl.h>
 #include <GL\GLU.h>
 #include <SDL_timer.h>

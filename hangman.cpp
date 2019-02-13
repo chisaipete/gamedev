@@ -96,7 +96,7 @@ int main(int argc, char **argv){
     while (game_on) {
         //loop
         std::string answer = get_word();
-        bool not_dead = true;
+        not_dead = true;
         bool not_valid_guess;
         int bad_guesses = 0;
         bool unguessed_letters;
@@ -126,7 +126,7 @@ int main(int argc, char **argv){
             not_valid_guess = true;
             while (not_valid_guess) {
                 std::cin >> guess;
-                if (isalpha(guess) && !(guessed.find(guess) != std::string::npos)) {
+                if (isalpha(guess) && guessed.find(guess) == std::string::npos) {
                     guessed += guess;
                     not_valid_guess = false;
                 } else {
@@ -134,7 +134,7 @@ int main(int argc, char **argv){
                 }
             }
 
-            if (!(answer.find(guess) != std::string::npos)) {
+            if (answer.find(guess) == std::string::npos) {
                 bad_guesses++;
             }
         }
