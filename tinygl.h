@@ -1092,7 +1092,7 @@ protected:
 };
 
 ShaderProgram::ShaderProgram() {
-    program_id = NULL;
+    program_id = (GLuint) NULL;
 }
 
 ShaderProgram::~ShaderProgram() {
@@ -1116,7 +1116,7 @@ bool ShaderProgram::bind() {
 }
 
 void ShaderProgram::unbind() {
-    glUseProgram(NULL);
+    glUseProgram((GLuint)NULL);
 }
 
 GLuint ShaderProgram::get_program_id() {
@@ -1135,7 +1135,7 @@ void ShaderProgram::print_program_log(GLuint program) {
         }
         delete[] info_log;
     } else {
-        prinf("Name %d is not a program\n", program);
+        printf("Name %d is not a program\n", program);
     }
 }
 
@@ -1145,13 +1145,13 @@ void ShaderProgram::print_shader_log(GLuint shader) {
         int max_length = info_log_length;
         glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &max_length);
         char* info_log = new char[max_length];
-        glGetShaderInfoLog(program, max_length, &info_log_length, info_log);
+        glGetShaderInfoLog(program_id, max_length, &info_log_length, info_log);
         if (info_log_length > 0) {
             printf("%s\n", info_log);
         }
         delete[] info_log;
     } else {
-        prinf("Name %d is not a shader\n", shader);
+        printf("Name %d is not a shader\n", shader);
     }  
 }
 
@@ -1159,7 +1159,7 @@ class PlainPolygonProgram2D : public ShaderProgram {
 public:
     bool load_program();
 private:
-}
+};
 
 bool PlainPolygonProgram2D::load_program() {
     GLint program_success = GL_TRUE;

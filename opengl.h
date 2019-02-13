@@ -84,10 +84,10 @@ bool init() {
                         success = false;
                     }
 
-                    if (!loadGP()) {
-                        printf("Unable to load shader programs!\n");
-                        success = false;
-                    }
+//                    if (!loadGP()) {
+//                        printf("Unable to load shader programs!\n");
+//                        success = false;
+//                    }
                 }
             }
         }
