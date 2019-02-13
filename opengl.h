@@ -83,6 +83,11 @@ bool init() {
                         printf("Unable to initialize OpenGL!\n");
                         success = false;
                     }
+
+                    if (!loadGP()) {
+                        printf("Unable to load shader programs!\n");
+                        success = false;
+                    }
                 }
             }
         }
@@ -145,6 +150,7 @@ bool load() {
         logSDLError(std::cout, "TTF_OpenFont");
         success = false;
     }
+
     // if (!t_fps.load_from_rendered_text("_", RED)) {
     //     success = false;
     // }
@@ -177,6 +183,7 @@ void render() {
     //Clear color buffer
     glClear(GL_COLOR_BUFFER_BIT);
     glLoadIdentity();
+
 
     glColor3f(1.f, 0.f, 0.f);
     gFont.render_text(0.f, 0.f, "The quick brown fox jumps\nover the lazy dog");
