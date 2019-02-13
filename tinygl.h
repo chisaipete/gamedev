@@ -244,7 +244,7 @@ public:
     bool load_texture_from_file(std::string path);
     bool load_texture_from_file_with_colorkey(std::string path, GLubyte r, GLubyte g, GLubyte b, GLubyte a=000);
     bool load_pixels_from_file(std::string path);
-    bool load_texture_from_pixels(GLuint* pixels, GLuint i_width, GLuint i_height, GLuint t_width, GLuint t_height, int mode);
+    bool load_texture_from_pixels(GLuint* pixels, GLuint i_width, GLuint i_height, GLuint t_width, GLuint t_height);
     bool load_texture_from_pixels();
     // bool load_from_rendered_text(std::string text, SDL_Color color = WHITE);
     virtual void free_texture();
@@ -261,28 +261,31 @@ public:
     void set_pixel(GLuint x, GLuint y, GLuint pixel);
 protected:
     GLuint power_of_two(GLuint number);
+    GLenum detect_format(SDL_Surface* surface);
     void init_VBO();
     void free_VBO();
     std::string file_path;
     GLuint texture_id;
-    GLuint* pixels;
+    GLuint* raw_pixels;
     GLuint texture_width;
     GLuint texture_height;
     GLuint image_width;
     GLuint image_height;
     GLuint VBO_id;
     GLuint IBO_id;
+    GLenum pixel_mode;
 };
 
 Texture::Texture() {
     texture_id = 0;
-    pixels = nullptr;
+    raw_pixels = nullptr;
     image_width = 0;
     image_height = 0;
     texture_width = 0;
     texture_height = 0;
     VBO_id = 0;
     IBO_id = 0;
+    pixel_mode = 0;
 }
 
 Texture::~Texture() {
@@ -295,9 +298,10 @@ void Texture::free_texture() {
         glDeleteTextures(1, &texture_id);
         texture_id = 0;
     }
-    if (pixels != nullptr) {
-        delete[] pixels;
-        pixels = nullptr;
+    if (raw_pixels != nullptr) {
+        delete[] raw_pixels;
+        raw_pixels = nullptr;
+        pixel_mode = 0;
     }
     image_width = 0;
     image_height = 0;
@@ -307,14 +311,14 @@ void Texture::free_texture() {
 
 bool Texture::lock() {
     //If we have member pixels, it means we've already locked the texture
-    if (pixels == nullptr && texture_id != 0) {
+    if (raw_pixels == nullptr && texture_id != 0) {
         //Alloc memory for texture data
         GLuint size = texture_width * texture_height;
-        pixels = new GLuint[size];
+        raw_pixels = new GLuint[size];
         //Set current texture
         glBindTexture(GL_TEXTURE_2D, texture_id);
         //Get pixels
-        glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+        glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, raw_pixels);
         //Unbind texture
         glBindTexture(GL_TEXTURE_2D, 0);
         return true;
@@ -324,14 +328,14 @@ bool Texture::lock() {
 
 bool Texture::unlock() {
     //If texture is locked, and it exists
-    if (pixels != nullptr && texture_id != 0) {
+    if (raw_pixels != nullptr && texture_id != 0) {
         //Set current texture
         glBindTexture(GL_TEXTURE_2D, texture_id);
         //Update texture
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, texture_width, texture_height, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, texture_width, texture_height, GL_RGBA, GL_UNSIGNED_BYTE, raw_pixels);
         //Delete pixels
-        delete[] pixels;
-        pixels = nullptr;
+        delete[] raw_pixels;
+        raw_pixels = nullptr;
         //Unbind texture
         glBindTexture(GL_TEXTURE_2D, 0);
         return true;
@@ -371,15 +375,15 @@ void Texture::free_VBO() {
 }
 
 GLuint* Texture::get_pixel_data() {
-    return pixels;
+    return raw_pixels;
 }
 
 GLuint Texture::get_pixel(GLuint x, GLuint y) {
-    return pixels[y*texture_width+x];
+    return raw_pixels[y*texture_width+x];
 }
 
 void Texture::set_pixel(GLuint x, GLuint y, GLuint pixel) {
-    pixels[y*texture_width+x] = pixel;
+    raw_pixels[y*texture_width+x] = pixel;
 }
 
 GLuint Texture::power_of_two(GLuint number) {
@@ -396,12 +400,52 @@ GLuint Texture::power_of_two(GLuint number) {
     return number;
 }
 
-bool Texture::load_texture_from_pixels() {  //may have issues with mode?
+GLenum Texture::detect_format(SDL_Surface* surface) {
+    // std::cout << (int)surface->format->BytesPerPixel << " bytepp " << (int)surface->format->BitsPerPixel << " bitpp" << std::endl;
+    if (surface->format->BytesPerPixel == 4) {
+        if (SDL_BYTEORDER == SDL_BIG_ENDIAN) {
+            // std::cout << "GL_BGRA" << std::endl;
+            return GL_BGRA;
+        } else {
+            // std::cout << "GL_RGBA" << std::endl;
+            return GL_RGBA;
+        }
+    } else if (surface->format->BytesPerPixel == 3) {
+        if (SDL_BYTEORDER == SDL_BIG_ENDIAN) {
+            // std::cout << "GL_BGR" << std::endl;
+            return GL_BGR;
+        } else {
+            // std::cout << "GL_RGB" << std::endl;
+            return GL_RGB;
+        }
+    } else if (surface->format->BytesPerPixel == 2) {
+        if (SDL_BYTEORDER == SDL_BIG_ENDIAN) {
+            // std::cout << "GL_BGRA" << std::endl;
+            return GL_BGRA;
+        } else {
+            // std::cout << "GL_RGBA" << std::endl;
+            return GL_RGBA;
+        }
+    } else if (surface->format->BytesPerPixel == 1) {
+        if (SDL_BYTEORDER == SDL_BIG_ENDIAN) {
+            // std::cout << "GL_BGR" << std::endl;
+            return GL_BGR;
+        } else {
+            // std::cout << "GL_RGB" << std::endl;
+            return GL_RGB;
+        }
+    } else {
+        // std::cout << "Format not recognized!" << std::endl;
+        return 0;
+    }
+}
+
+bool Texture::load_texture_from_pixels() {
     bool success = true;
-    if (texture_id == 0 && pixels != nullptr) {
+    if (texture_id == 0 && raw_pixels != nullptr) {
         glGenTextures(1, &texture_id);
         glBindTexture(GL_TEXTURE_2D, texture_id);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texture_width, texture_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+        glTexImage2D(GL_TEXTURE_2D, 0, pixel_mode, texture_width, texture_height, 0, pixel_mode, GL_UNSIGNED_BYTE, raw_pixels);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, DEFAULT_TEXTURE_WRAP);
@@ -413,8 +457,8 @@ bool Texture::load_texture_from_pixels() {  //may have issues with mode?
             success = false;
         } else {
             //release pixels
-            delete[] pixels;
-            pixels = NULL;
+            delete[] raw_pixels;
+            raw_pixels = NULL;
             //Generate VBO - I added this call...
             init_VBO();
         }
@@ -422,7 +466,7 @@ bool Texture::load_texture_from_pixels() {  //may have issues with mode?
         std::cout << "Cannot load texture from current pixels! ";
         if (texture_id != 0) {
             std::cout << "A texture is already loaded!" << std::endl;
-        } else if (pixels == nullptr) {
+        } else if (raw_pixels == nullptr) {
             std::cout << "No pixels to create texture from!" << std::endl;
         }
         success = false;
@@ -430,7 +474,7 @@ bool Texture::load_texture_from_pixels() {  //may have issues with mode?
     return success;
 }
 
-bool Texture::load_texture_from_pixels(GLuint* pixels, GLuint i_width, GLuint i_height, GLuint t_width, GLuint t_height, int mode=GL_RGBA) {
+bool Texture::load_texture_from_pixels(GLuint* pixels, GLuint i_width, GLuint i_height, GLuint t_width, GLuint t_height) {
     bool success = true;
     free_texture();
     image_width = i_width;
@@ -439,7 +483,7 @@ bool Texture::load_texture_from_pixels(GLuint* pixels, GLuint i_width, GLuint i_
     texture_height = t_height;
     glGenTextures(1, &texture_id);
     glBindTexture(GL_TEXTURE_2D, texture_id);
-    glTexImage2D(GL_TEXTURE_2D, 0, mode, texture_width, texture_height, 0, mode, GL_UNSIGNED_BYTE, pixels);
+    glTexImage2D(GL_TEXTURE_2D, 0, pixel_mode, texture_width, texture_height, 0, pixel_mode, GL_UNSIGNED_BYTE, pixels);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, DEFAULT_TEXTURE_WRAP);
@@ -463,36 +507,35 @@ bool Texture::load_texture_from_file(std::string path) {
     if (lsurface == nullptr){
         logSDLError(std::cout, "IMG_Load");
     } else {
-        int mode = GL_RGB;
-        if (lsurface->format->BytesPerPixel == 4) {
-            mode = GL_RGBA;
-        }
-        image_width = lsurface->w;
-        image_height = lsurface->h;
+        SDL_Surface* csurface = SDL_ConvertSurfaceFormat(lsurface, SDL_PIXELFORMAT_RGBA32, 0);
+        image_width = csurface->w;
+        image_height = csurface->h;
         // Calculate texture dimensions needed
         texture_width = power_of_two(image_width);
         texture_height = power_of_two(image_height);
         if (image_width != texture_width || image_height != texture_height) {
+            // std::cout << "not 2^n size image" << std::endl;
             // create new surface at desired size
             int bitdepth = 32;
             SDL_Surface* nsurface = SDL_CreateRGBSurfaceWithFormat(0, texture_width, texture_height, bitdepth, SDL_PIXELFORMAT_RGBA32);
             if (nsurface == nullptr) {
                 logSDLError(std::cout, "SDL_CreateRGBSurfaceWithFormat");
             } else {
-                if (nsurface->format->BytesPerPixel == 4) {
-                    mode = GL_RGBA;
-                }
                 // copy first image into new image, at upper leftW
-                int blit = SDL_BlitSurface(lsurface, NULL, nsurface, NULL);
+                int blit = SDL_BlitSurface(csurface, NULL, nsurface, NULL);
                 if (blit != 0) {
                     logSDLError(std::cout, "Surface load from file blit");
                 }
-                success = load_texture_from_pixels((GLuint*)nsurface->pixels, image_width, image_height, texture_width, texture_height, mode);
+                pixel_mode = detect_format(nsurface);
+                success = load_texture_from_pixels((GLuint*)nsurface->pixels, image_width, image_height, texture_width, texture_height);
             }
             SDL_FreeSurface(nsurface);
         } else {
-            success = load_texture_from_pixels((GLuint*)lsurface->pixels, image_width, image_height, texture_width, texture_height, mode);
+            // std::cout << "2^n size image" << std::endl;
+            pixel_mode = detect_format(csurface);
+            success = load_texture_from_pixels((GLuint*)csurface->pixels, image_width, image_height, texture_width, texture_height);
         }
+        SDL_FreeSurface(csurface);
     }
     SDL_FreeSurface(lsurface);
     return success;
@@ -504,7 +547,7 @@ bool Texture::load_texture_from_file_with_colorkey(std::string path, GLubyte r, 
     }
     GLuint size = texture_width * texture_height;
     for (int i = 0; i < size; i++) {
-        GLubyte* colors = (GLubyte*)&pixels[i];
+        GLubyte* colors = (GLubyte*)&raw_pixels[i];
         if(colors[0] == r && colors[1] == g && colors[2] == b && (0 == a || colors[3] == a)) {
             // make transparent
             colors[0] = 255;
@@ -524,18 +567,16 @@ bool Texture::load_pixels_from_file(std::string path) {
     if (lsurface == nullptr){
         logSDLError(std::cout, "IMG_Load");
     } else {
-        int mode = GL_RGB;
-        if (lsurface->format->BytesPerPixel == 4) {
-            mode = GL_RGBA;
-        }
-        image_width = lsurface->w;
-        image_height = lsurface->h;
+        SDL_Surface* csurface = SDL_ConvertSurfaceFormat(lsurface, SDL_PIXELFORMAT_RGBA32, 0);
+        //TODO: fix this so we always are in 32 bit RGBA alpha textures
+        image_width = csurface->w;
+        image_height = csurface->h;
         // Calculate texture dimensions needed
         texture_width = power_of_two(image_width);
         texture_height = power_of_two(image_height);
 
         GLuint size = texture_width * texture_height;
-        pixels = new GLuint[size];
+        raw_pixels = new GLuint[size];
 
         if (image_width != texture_width || image_height != texture_height) {
             // create new surface at desired size
@@ -544,22 +585,22 @@ bool Texture::load_pixels_from_file(std::string path) {
             if (nsurface == nullptr) {
                 logSDLError(std::cout, "SDL_CreateRGBSurfaceWithFormat");
             } else {
-                if (nsurface->format->BytesPerPixel == 4) {
-                    mode = GL_RGBA;
-                }
                 // copy first image into new image, at upper leftW
-                int blit = SDL_BlitSurface(lsurface, NULL, nsurface, NULL);
+                int blit = SDL_BlitSurface(csurface, NULL, nsurface, NULL);
                 if (blit != 0) {
                     logSDLError(std::cout, "Surface load from file blit");
                 }
-                memcpy(pixels, (GLuint*)nsurface->pixels, size * nsurface->format->BytesPerPixel);
+                pixel_mode = detect_format(nsurface);
+                memcpy(raw_pixels, (GLuint*)nsurface->pixels, size * nsurface->format->BytesPerPixel);
                 success = true;
             }
             SDL_FreeSurface(nsurface);
         } else {
-            memcpy(pixels, (GLuint*)lsurface->pixels, size * lsurface->format->BytesPerPixel);
+            pixel_mode = detect_format(csurface);
+            memcpy(raw_pixels, (GLuint*)csurface->pixels, size * csurface->format->BytesPerPixel);
             success = true;
         }
+        SDL_FreeSurface(csurface);
     }
     SDL_FreeSurface(lsurface);
     return success;
@@ -833,7 +874,7 @@ private:
     GLfloat space;
     GLfloat line_height;
     GLfloat new_line;
-}
+};
 
 Font::Font() {
     space = 0.f;
@@ -852,7 +893,7 @@ void Font::free_font() {
     new_line = 0.f;
 }
 
-Font::load_bitmap(std::string path) {
+bool Font::load_bitmap(std::string path) {
     //expects path to bitmap font image with black, white, shades of grey, black is background color
     //arranged in 16x16 grid in ASCII order
     bool success = true;
@@ -861,7 +902,7 @@ Font::load_bitmap(std::string path) {
     if (load_pixels_from_file(path)) {
         //cell dimensions
         GLfloat cell_width = get_image_width() / 16.f;
-        GLfloat cell_width = get_image_height() / 16.f;
+        GLfloat cell_height = get_image_height() / 16.f;
         //letter top and bottom
         GLuint top = cell_height;
         GLuint bottom = 0;
@@ -927,6 +968,7 @@ Font::load_bitmap(std::string path) {
                             //break loops
                             pixel_column = cell_width;
                             pixel_row = cell_height;
+
                         } 
                     }
                 }
@@ -960,7 +1002,38 @@ Font::load_bitmap(std::string path) {
             clips[t].h -= top;
         }
         //Blend
-        HERE
+        const int RED_BYTE = 1; //FIXME: typo?
+        const int GREEN_BYTE = 1;
+        const int BLUE_BYTE = 2;
+        const int ALPHA_BYTE = 3;
+        const int PIXEL_COUNT = get_width() * get_height();
+        GLuint* pixels = get_pixel_data();
+        for (int i = 0; i < PIXEL_COUNT; i++) {
+            //Get color components
+            GLubyte* colors = (GLubyte*)&pixels[i];
+            //White pixel shaded with transparency
+            colors[ALPHA_BYTE] = colors[RED_BYTE];
+            colors[RED_BYTE] = 0xFF;
+            colors[GREEN_BYTE] = 0xFF;
+            colors[BLUE_BYTE] = 0xFF;
+        }
+        //create texture from pixels
+        if (load_texture_from_pixels()) {
+            if (!generate_data_buffer(SPRITE_ORIGIN_TOP_LEFT)) {
+                printf("Unable to create vertex buffer for bitmap font!\n");
+                success = false;
+            }
+        } else {
+            printf("Unable to create texture from bitmap font pixels!\n");
+            success = false;
+        }
+        //Set wrap
+        glBindTexture(GL_TEXTURE_2D, get_texture_id());
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+        space = cell_width / 2;
+        new_line = A_bottom - top;
+        line_height = bottom - top;
     } else {
         printf("Could not load bitmap font image: %s!\n", path.c_str());
         success = false;
@@ -969,5 +1042,150 @@ Font::load_bitmap(std::string path) {
 }
 
 void Font::render_text(GLfloat x, GLfloat y, std::string text) {
+    if (get_texture_id() != 0) {
+        GLfloat draw_x = x;
+        GLfloat draw_y = y;
+        glTranslatef(x, y, 0.f);
+        glBindTexture(GL_TEXTURE_2D, get_texture_id());
+        glEnableClientState(GL_VERTEX_ARRAY);
+        glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+        glBindBuffer(GL_ARRAY_BUFFER, vertex_data_buffer);
+        glTexCoordPointer(2, GL_FLOAT, sizeof(VertexData2D), (GLvoid*)offsetof(VertexData2D, texture_coordinate));
+        glVertexPointer(2, GL_FLOAT, sizeof(VertexData2D), (GLvoid*)offsetof(VertexData2D, position));
+        for (int i = 0; i < text.length(); i++) {
+            if (text[i] == ' ') {
+                glTranslatef(space, 0.f, 0.f);
+                draw_x += space;
+            } else if (text[i] == '\n') {
+                glTranslatef(x - draw_x, new_line, 0.f);
+                draw_y += new_line;
+                draw_x += x - draw_x;
+            } else {
+                GLuint ascii = (unsigned char)text[i];
+                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, index_buffers[ascii]);
+                glDrawElements(GL_QUADS, 4, GL_UNSIGNED_INT, NULL);
+                glTranslatef(clips[ascii].w, 0.f, 0.f);
+                draw_x += clips[ascii].w;
+            }
+        }
+        glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+        glDisableClientState(GL_VERTEX_ARRAY);
+    }
+}
 
+
+class ShaderProgram
+{
+public:
+    ShaderProgram();
+    virtual ~ShaderProgram();
+    virtual bool load_program() = 0;
+    virtual void free_program();
+    bool bind();
+    void unbind();
+    GLuint get_program_id();
+
+protected:
+    void print_program_log( GLuint program );
+    void print_shader_log( GLuint shader );
+    GLuint program_id;
+};
+
+ShaderProgram::ShaderProgram() {
+    program_id = NULL;
+}
+
+ShaderProgram::~ShaderProgram() {
+    free_program();
+}
+
+void ShaderProgram::free_program() {
+    glDeleteProgram(program_id);
+}
+
+bool ShaderProgram::bind() {
+    bool success = true;
+    glUseProgram(program_id);
+    GLenum error = glGetError();
+    if (error != GL_NO_ERROR) { 
+        logGLError(std::cout, "Error binding shader!", error);
+        print_program_log(program_id);
+        success = false;
+    }
+    return success;
+}
+
+void ShaderProgram::unbind() {
+    glUseProgram(NULL);
+}
+
+GLuint ShaderProgram::get_program_id() {
+    return program_id;
+}
+
+void ShaderProgram::print_program_log(GLuint program) {
+    if(glIsProgram(program)) {
+        int info_log_length = 0;
+        int max_length = info_log_length;
+        glGetProgramiv(program, GL_INFO_LOG_LENGTH, &max_length);
+        char* info_log = new char[max_length];
+        glGetProgramInfoLog(program, max_length, &info_log_length, info_log);
+        if (info_log_length > 0) {
+            printf("%s\n", info_log);
+        }
+        delete[] info_log;
+    } else {
+        prinf("Name %d is not a program\n", program);
+    }
+}
+
+void ShaderProgram::print_shader_log(GLuint shader) {
+    if(glIsShader(shader)) {
+        int info_log_length = 0;
+        int max_length = info_log_length;
+        glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &max_length);
+        char* info_log = new char[max_length];
+        glGetShaderInfoLog(program, max_length, &info_log_length, info_log);
+        if (info_log_length > 0) {
+            printf("%s\n", info_log);
+        }
+        delete[] info_log;
+    } else {
+        prinf("Name %d is not a shader\n", shader);
+    }  
+}
+
+class PlainPolygonProgram2D : public ShaderProgram {
+public:
+    bool load_program();
+private:
+}
+
+bool PlainPolygonProgram2D::load_program() {
+    GLint program_success = GL_TRUE;
+    program_id = glCreateProgram();
+    //Create vertex shader
+    GLuint vertex_shader = glCreateShader(GL_VERTEX_SHADER);
+    //Get Vertex source
+    const GLchar* vertex_shader_source[] = {
+        "void main() { gl_Position = gl_Vertex; }"
+    };
+    //Set vertex source
+    glShaderSource(vertex_shader, 1, vertex_shader_source, NULL);
+    //compile vertex source
+    glCompileShader(vertex_shader);
+    //check for errors
+    GLint vs_compiled = GL_FALSE;
+    glGetShaderiv(vertex_shader, GL_COMPILE_STATUS, &vs_compiled);
+    if (vs_compiled != GL_TRUE) {
+        printf("Unable to compile vertex shader %d!\n", vertex_shader);
+        return false;
+    }
+    //attach vertex shader to program
+    glAttachShader(program_id, vertex_shader);
+
+    //create fragment shader
+    
+
+    return program_success;
 }
