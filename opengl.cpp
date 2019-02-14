@@ -1,6 +1,6 @@
 #include "opengl.h"
 
-SDL_Window* window = NULL;
+SDL_Window* window = nullptr;
 SDL_GLContext context;
 
 int main(int argc, char* args[]) {

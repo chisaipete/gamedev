@@ -9,7 +9,7 @@
 #include <SDL.h>
 #include <glew.h>
 #include <SDL_opengl.h>
-#include <GL\GLU.h>
+#include <GL\glu.h>
 #include <SDL_timer.h>
 #include <SDL_image.h>
 #include <SDL_ttf.h>

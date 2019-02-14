@@ -43,7 +43,7 @@ bool close();
 
 void runMainLoop(int val);
 
-void handleKeys(unsigned char key, int x, int y);
+void handleKeys(char key, int x, int y);
 
 /* ----------------------------------------------------- */
 
@@ -169,8 +169,8 @@ bool close() {
     // t_fps.free();
     // image.free();
     // if (model != nullptr) { delete model; }
-    if (font != nullptr) { TTF_CloseFont(font); font = NULL; }
-    if (window != nullptr) { SDL_DestroyWindow(window); window = NULL; }
+    if (font != nullptr) { TTF_CloseFont(font); font = nullptr; }
+    if (window != nullptr) { SDL_DestroyWindow(window); window = nullptr; }
     TTF_Quit();
     SDL_Quit();
     return true;
@@ -189,5 +189,5 @@ void render() {
     gFont.render_text(0.f, 0.f, "The quick brown fox jumps\nover the lazy dog");
 }
 
-void handleKeys(unsigned char key, int x, int y) {
+void handleKeys(char key, int x, int y) {
 }

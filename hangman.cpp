@@ -14,7 +14,7 @@ unsigned long long rdtsc(){
 }
 
 std::string get_word() {
-    std::string filename = "shakespeare.txt";
+    std::string filename = "res/shakespeare.txt";
     std::ifstream istrm(filename);
     std::string word;
     int num_words = 29245; //magic number, length of file @ one word per line
