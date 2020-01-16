@@ -26,6 +26,7 @@ add_executable(asteroids asteroids.cpp)
 add_executable(dungeon dungeon.cpp)
 add_executable(leaper leaper.cpp)
 add_executable(tilemap tilemap.cpp)
+add_executable(raycaster raycaster.cpp raycaster.cpp)
 add_executable(tiny tiny.cpp)
 add_executable(tinyprof tiny.cpp)
 add_executable(opengl opengl.cpp)
@@ -42,6 +43,7 @@ target_link_libraries(tiny ${SDL2_LINK})
 target_link_libraries(tinyprof ${SDL2_LINK})
 target_link_libraries(opengl ${SDL2_LINK} ${GL_LINK})
 target_link_libraries(opengl_dbug ${SDL2_LINK} ${GL_LINK})
+
 
 #add_executable(gamedev
 #        asteroids.cpp
