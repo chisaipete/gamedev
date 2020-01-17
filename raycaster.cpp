@@ -112,6 +112,53 @@ uint32_t getMapColor(const char m) {
     }
 }
 
+void drawMap(const size_t win_w, const size_t win_h, std::vector<uint32_t> &framebuffer, const size_t map_w, const size_t map_h, const char *map, const size_t rect_w, const size_t rect_h, uint32_t current_color) {// draw the map
+    for (size_t j = 0; j < map_h; j++) {
+        for (size_t i = 0; i <map_w; i++) {
+            if (map[i+j*map_w] == ' ') continue;
+            size_t rect_x = i * rect_w;
+            size_t rect_y = j * rect_h;
+            current_color = getMapColor(map[i+j*map_w]);
+            draw_rectangle(framebuffer, win_w, win_h, current_color, rect_x, rect_y, rect_w, rect_h);
+        }
+    }
+}
+
+void drawPlayer(const size_t win_w, const size_t win_h, std::vector<uint32_t> &framebuffer, float player_x, float player_y, const size_t rect_w, const size_t rect_h) {
+    const size_t player_w = 5;
+    const size_t player_h = 5;
+    draw_rectangle(framebuffer, win_w, win_h, black, player_x*rect_w, player_y*rect_h, player_w, player_h);
+}
+
+void drawGazeLine(const size_t win_w, std::vector<uint32_t> &framebuffer, const size_t map_w, const char *map, float player_x, float player_y, float player_a, const size_t rect_w, const size_t rect_h) {
+    for (float c = 0; c < 20; c += .05) {
+        float x = player_x + c * cos(player_a);
+        float y = player_y + c * sin(player_a);
+        if (map[int(x) + int(y) * map_w] != ' ') break;
+        size_t px = x*rect_w;
+        size_t py = y*rect_h;
+        framebuffer[px + py*win_w] = black;
+    }
+}
+
+void drawConeAndProjection(const size_t win_w, const size_t win_h, std::vector<uint32_t> &framebuffer, const size_t map_w, const char *map, float player_x, float player_y, float player_a, const float fov, const size_t rect_w, const size_t rect_h) {
+    for (size_t i = 0; i < win_w / 2; i++) { // sweep to have 1 ray for each column of the view image
+        float angle = player_a - fov / 2 + fov * i / float(win_w/2); // calculate the line of sweeping the fov cone by calculating the new angle in radians
+        for ( float c = 0; c < 20; c += .05) {
+            float cx = player_x + c * cos(angle);
+            float cy = player_y + c * sin(angle);
+            size_t px = cx*rect_w;
+            size_t py = cy*rect_h;
+            framebuffer[px + py*win_w] = gray; // draw the cone
+            if (map[int(cx) + int(cy) * map_w] != ' ') {
+                size_t column_height = win_h/(c*cos(angle-player_a)); // full height (win_h) * size of column (1/c) to get proportional size of column
+                draw_rectangle(framebuffer, win_w, win_h, getMapColor(map[int(cx) + int(cy) * map_w]), win_w/2+i, win_h/2-column_height/2, 1, column_height);
+                break;
+            }
+        }
+    }
+}
+
 int main(int argc, char **argv) {
     if (!init()) {
         std::cout << "Initialization Failed" << std::endl;
@@ -124,11 +171,10 @@ int main(int argc, char **argv) {
             const size_t win_w = SCREEN_WIDTH; // image width
             const size_t win_h = SCREEN_HEIGHT; // image height
 
-            std::vector<uint32_t> framebuffer(win_w*win_h, white); // the image itself, initialized to white
 
             const size_t map_w = 16;
             const size_t map_h = 16;
-            const char map[] =  "0000011111110000"\
+            const char map[] =  "0001111111110000"\
                                 "2              0"\
                                 "2      22222   0"\
                                 "2     0        0"\
@@ -149,13 +195,17 @@ int main(int argc, char **argv) {
             float player_y = 2.345;
             float player_a = 1.523;
             const float fov = M_PI / 3.0; //60 deg field of view (pi/3 rad)
+            const float fov_degree = 2*M_PI / 360.0;
 
             const size_t rect_w = win_w / (map_w*2);
             const size_t rect_h = win_h / map_h;
 
-            uint32_t current_color = black;
+            uint32_t current_color = white;
 
+            std::vector<uint32_t> framebuffer(win_w*win_h, white); // the image itself, initialized to white
             framebuffer_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, SCREEN_WIDTH, SCREEN_HEIGHT);
+
+            int frame_delay = 5;
 
             while (!quit) {
                 SDL_Event event;
@@ -175,48 +225,18 @@ int main(int argc, char **argv) {
                     }
                 }
 
-                // draw the map
-                for (size_t j = 0; j < map_h; j++) {
-                    for (size_t i = 0; i <map_w; i++) {
-                        if (map[i+j*map_w] == ' ') continue;
-                        size_t rect_x = i * rect_w;
-                        size_t rect_y = j * rect_h;
-                        current_color = getMapColor(map[i+j*map_w]);
-                        draw_rectangle(framebuffer, win_w, win_h, current_color, rect_x, rect_y, rect_w, rect_h);
-                    }
+                if (frame_delay == 0) {
+                    frame_delay = 5;
+                    player_a += fov_degree;
+                } else {
+                    frame_delay -= 1;
                 }
+                framebuffer = std::vector<uint32_t>(win_w*win_h, white); //clear screen
 
-                // draw player
-//                const size_t player_w = 5;
-//                const size_t player_h = 5;
-//                draw_rectangle(framebuffer, win_w, win_h, black, player_x*rect_w, player_y*rect_h, player_w, player_h);
-//
-                // draw sight line
-//                for (float c = 0; c < 20; c += .05) {
-//                    float x = player_x + c * cos(player_a);
-//                    float y = player_y + c * sin(player_a);
-//                    if (map[int(x) + int(y) * map_w] != ' ') break;
-//                    size_t px = x*rect_w;
-//                    size_t py = y*rect_h;
-//                    framebuffer[px + py*win_w] = white;
-//                }
-
-                // draw sight cone & projection view
-                for (size_t i = 0; i < win_w/2; i++) { // sweep to have 1 ray for each column of the view image
-                    float angle = player_a - fov / 2 + fov * i / float(win_w/2); // calculate the line of sweeping the fov cone by calculating the new angle in radians
-                    for ( float c = 0; c < 20; c += .05) {
-                        float cx = player_x + c * cos(angle);
-                        float cy = player_y + c * sin(angle);
-                        size_t px = cx*rect_w;
-                        size_t py = cy*rect_h;
-                        framebuffer[px + py*win_w] = gray; // draw the cone
-                        if (map[int(cx) + int(cy) * map_w] != ' ') {
-                            size_t column_height = win_h/(c*cos(angle-player_a)); // full height (win_h) * size of column (1/c) to get proportional size of column
-                            draw_rectangle(framebuffer, win_w, win_h, getMapColor(map[int(cx) + int(cy) * map_w]), win_w/2+i, win_h/2-column_height/2, 1, column_height);
-                            break;
-                        }
-                    }
-                }
+                drawMap(win_w, win_h, framebuffer, map_w, map_h, map, rect_w, rect_h, current_color);
+//                drawPlayer(win_w, win_h, framebuffer, player_x, player_y, rect_w, rect_h);
+//                drawGazeLine(win_w, framebuffer, map_w, map, player_x, player_y, player_a, rect_w, rect_h);
+                drawConeAndProjection(win_w, win_h, framebuffer, map_w, map, player_x, player_y, player_a, fov, rect_w, rect_h);
 
                 SDL_UpdateTexture(framebuffer_texture, NULL, reinterpret_cast<void *>(framebuffer.data()), SCREEN_WIDTH*4);
 
