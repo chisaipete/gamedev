@@ -19,9 +19,10 @@ void unpack_color(const uint32_t &color, uint8_t &r, uint8_t &g, uint8_t &b, uin
 }
 
 void draw_rectangle(std::vector<uint32_t> &frame, const size_t i_w, const size_t i_h, const uint32_t color, const size_t x, const size_t y, const size_t w, const size_t h) {
-    assert(frame.size() == i_w * i_h);
+    assert(frame.size() == i_w*i_h);
     for (size_t i = x; i < x + w; i++) {
         for (size_t j = y; j < y + h; j++) {
+            assert(i<i_w && j<i_h);
             frame[i+j*i_w] = color;
         }
     }
@@ -39,67 +40,81 @@ void drop_ppm_image(const std::string &filename, const std::vector<uint32_t> &im
     ofs.close();
 }
 
+const uint32_t white = pack_color(255, 255, 255);
+const uint32_t gray = pack_color(160, 160, 160);
+const uint32_t warm_gray = pack_color(162, 151, 163); //0
+const uint32_t off_white = pack_color(249, 252, 241); //1
+const uint32_t red = pack_color(190, 83, 85); //2
+const uint32_t blue = pack_color(82, 107, 121);
+
+uint32_t getMapColor(const char m) {
+    switch (m) {
+        case '0':
+            return warm_gray;
+        case '1':
+            return off_white;
+        case '2':
+            return red;
+        case '3':
+            return blue;
+        default:
+            return white;
+    }
+}
+
 int main() {
-    const size_t win_w = 512; // image width
+    const size_t win_w = 1024; // image width
     const size_t win_h = 512; // image height
 
-    std::vector<uint32_t> framebuffer(win_w*win_h, 255); // the image itself, initialized to red
-
-    for (size_t j = 0; j < win_h; j++) { // fill the screen with color gradients
-        for (size_t i = 0; i < win_w; i++) {
-            uint8_t r = float(255) * j / float(win_h); // varies between 0 and 255 as j sweeps the vertical
-            uint8_t g = float(255) * i / float(win_w); // varies between 0 and 255 as i sweeps the horizontal
-            uint8_t b = 0;
-            framebuffer[i+j*win_w] = pack_color(r, g, b);
-        }
-    }
+    std::vector<uint32_t> framebuffer(win_w*win_h, white); // the image itself, initialized to white
 
     const size_t map_w = 16;
     const size_t map_h = 16;
+    const char map[] =  "0000011111110000"\
+                        "2              0"\
+                        "2      22222   0"\
+                        "2     0        0"\
+                        "0     0  2220000"\
+                        "0     3        0"\
+                        "0   20000      0"\
+                        "0   0   22200  0"\
+                        "0   0   0      0"\
+                        "0   0   2  00000"\
+                        "0       2      0"\
+                        "1       2      0"\
+                        "0       0      0"\
+                        "0 0000000      0"\
+                        "0              0"\
+                        "0001111111100000";
 
-    const char map[] =  "1111111111111111"\
-                        "1              1"\
-                        "1      11111   1"\
-                        "1     1        1"\
-                        "1     1  1111111"\
-                        "1     1        1"\
-                        "1   11111      1"\
-                        "1   1   11111  1"\
-                        "1   1   1      1"\
-                        "1   1   1  11111"\
-                        "1       1      1"\
-                        "1       1      1"\
-                        "1       1      1"\
-                        "1 1111111      1"\
-                        "1              1"\
-                        "1111111111111111";
 
-    const size_t rect_w = win_w / map_w;
-    const size_t rect_h = win_h / map_h;
-
-    const uint32_t cyan = pack_color(0, 255, 255);
-
-    for (size_t j = 0; j < map_h; j++) {
-        for (size_t i = 0; i <map_w; i++) {
-            if (map[i+j*map_w] != ' ') {
-                size_t rect_x = i * rect_w;
-                size_t rect_y = j * rect_h;
-                draw_rectangle(framebuffer, win_w, win_h, cyan, rect_x, rect_y, rect_w, rect_h);
-            }
-        }
-    }
 
     float player_x = 3.456;
     float player_y = 2.345;
-    const size_t player_w = 5;
-    const size_t player_h = 5;
-    const uint32_t white = pack_color(255, 255, 255);
-
-    draw_rectangle(framebuffer, win_w, win_h, white, player_x*rect_w, player_y*rect_h, player_w, player_h);
-
     float player_a = 1.523;
+    const float fov = M_PI / 3.0; //60 deg field of view (pi/3 rad)
 
-//    draw sight line
+    const size_t rect_w = win_w / (map_w*2);
+    const size_t rect_h = win_h / map_h;
+    uint32_t current_color = white;
+
+    // draw the map
+    for (size_t j = 0; j < map_h; j++) {
+        for (size_t i = 0; i <map_w; i++) {
+            if (map[i+j*map_w] == ' ') continue;
+            size_t rect_x = i * rect_w;
+            size_t rect_y = j * rect_h;
+            current_color = getMapColor(map[i+j*map_w]);
+            draw_rectangle(framebuffer, win_w, win_h, current_color, rect_x, rect_y, rect_w, rect_h);
+        }
+    }
+
+    // draw player
+//    const size_t player_w = 5;
+//    const size_t player_h = 5;
+//    draw_rectangle(framebuffer, win_w, win_h, black, player_x*rect_w, player_y*rect_h, player_w, player_h);
+
+    // draw sight line
 //    for (float c = 0; c < 20; c += .05) {
 //        float x = player_x + c * cos(player_a);
 //        float y = player_y + c * sin(player_a);
@@ -109,18 +124,21 @@ int main() {
 //        framebuffer[px + py*win_w] = white;
 //    }
 
-    const float fov = M_PI / 3.0; //60 deg field of view
 
-//    draw sight cone
-    for (size_t i = 0; i < win_w; i++) { // sweep to have 1 ray for each column of the view image
-        float angle = player_a - fov / 2 + fov * i / float(win_w); // calculate the line of sweeping the fov cone by calculating the new angle in radians
+    // draw sight cone & projection view
+    for (size_t i = 0; i < win_w/2; i++) { // sweep to have 1 ray for each column of the view image
+        float angle = player_a - fov / 2 + fov * i / float(win_w/2); // calculate the line of sweeping the fov cone by calculating the new angle in radians
         for ( float c = 0; c < 20; c += .05) {
             float cx = player_x + c * cos(angle);
             float cy = player_y + c * sin(angle);
-            if (map[int(cx) + int(cy) * map_w] != ' ') break;
             size_t px = cx*rect_w;
             size_t py = cy*rect_h;
-            framebuffer[px + py*win_w] = white;
+            framebuffer[px + py*win_w] = gray; // draw the cone
+            if (map[int(cx) + int(cy) * map_w] != ' ') {
+                size_t column_height = win_h/(c*cos(angle-player_a)); // full height (win_h) * size of column (1/c) to get proportional size of column
+                draw_rectangle(framebuffer, win_w, win_h, getMapColor(map[int(cx) + int(cy) * map_w]), win_w/2+i, win_h/2-column_height/2, 1, column_height);
+                break;
+            }
         }
     }
 
