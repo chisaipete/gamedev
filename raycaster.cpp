@@ -112,10 +112,18 @@ void draw_rectangle(std::vector<uint32_t> &frame, const size_t i_w, const size_t
 const uint32_t white = pack_color(255, 255, 255);
 const uint32_t black = pack_color(0, 0, 0);
 const uint32_t gray = pack_color(160, 160, 160);
-const uint32_t warm_gray = pack_color(162, 151, 163); //0
-const uint32_t off_white = pack_color(249, 252, 241); //1
 const uint32_t red = pack_color(190, 83, 85); //2
-const uint32_t blue = pack_color(82, 107, 121);
+
+struct Sprite {
+    float x, y;
+    size_t texture_id;
+};
+
+void drawSprites(const size_t win_w, const size_t win_h, std::vector<uint32_t> &framebuffer, const std::vector<Sprite> &sprites, const size_t map_w, const size_t map_h) {
+    for (size_t i=0; i < sprites.size(); i++) {
+        draw_rectangle(framebuffer, win_w, win_h, red, (sprites[i].x * map_w)-3, (sprites[i].y * map_h)-3, 6, 6);
+    }
+}
 
 void drawMap(const size_t win_w, const size_t win_h, std::vector<uint32_t> &framebuffer, const std::vector<uint32_t> &wall_textures, size_t wall_texture_size, const size_t map_w, const size_t map_h, const char *map, const size_t rect_w, const size_t rect_h) {// draw the map
     for (size_t j = 0; j < map_h; j++) {
@@ -127,15 +135,6 @@ void drawMap(const size_t win_w, const size_t win_h, std::vector<uint32_t> &fram
 //            draw_rectangle(framebuffer, win_w, win_h, current_color, rect_x, rect_y, rect_w, rect_h);
             size_t texture_id = int(map[i+j*map_w] - '0');
             draw_rectangle(framebuffer, win_w, win_h, wall_textures[texture_id*wall_texture_size], rect_x, rect_y, rect_w, rect_h);
-        }
-    }
-}
-
-void drawTexture(const size_t win_w, const std::vector<uint32_t> &wall_textures, size_t wall_texture_size, size_t wall_texture_count, std::vector<uint32_t> &framebuffer) {
-    const size_t texture_id = 4;
-    for (size_t i=0; i < wall_texture_size ; i++) {
-        for (size_t j=0; j < wall_texture_size; j++) {
-            framebuffer[i+j*win_w] = wall_textures[i + texture_id * wall_texture_size + j * wall_texture_size * wall_texture_count];
         }
     }
 }
@@ -227,6 +226,8 @@ int main(int argc, char **argv) {
             const float fov = M_PI / 3.0; //60 deg field of view (pi/3 rad)
             const float fov_degree = 2*M_PI / 360.0;
 
+            std::vector<Sprite> sprites{ {1.834, 8.765, 0}, {5.323, 5.365, 1}, {4.123, 10.265, 1} };
+
             const size_t rect_w = win_w / (map_w*2);
             const size_t rect_h = win_h / map_h;
 
@@ -275,7 +276,7 @@ int main(int argc, char **argv) {
                 drawMap(win_w, win_h, framebuffer, wall_textures, wall_texture_size, map_w, map_h, map, rect_w, rect_h);
                 drawConeAndProjection(win_w, win_h, framebuffer, wall_textures, wall_texture_size, wall_texture_count, map_w, map, player_x, player_y, player_a, fov, rect_w, rect_h);
 
-                drawTexture(win_w, wall_textures, wall_texture_size, wall_texture_count, framebuffer);
+                drawSprites(win_w, win_h, framebuffer, sprites, rect_h, rect_w);
 
                 SDL_UpdateTexture(framebuffer_texture, NULL, reinterpret_cast<void *>(framebuffer.data()), SCREEN_WIDTH*4);
 
