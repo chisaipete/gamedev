@@ -6,6 +6,8 @@
 #include <cmath>
 
 #include <SDL.h>
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
 
 const uint32_t SCREEN_WIDTH = 1024;
 const uint32_t SCREEN_HEIGHT = 512;
@@ -43,6 +45,7 @@ bool init() {
 
 bool load() {
     bool success = true;
+
     return success;
 }
 
@@ -60,11 +63,40 @@ uint32_t pack_color(const uint8_t r, const uint8_t g, const uint8_t b, const uin
     return (a << 24u) + (b << 16u) + (g << 8u) + r;
 }
 
-void unpack_color(const uint32_t &color, uint8_t &r, uint8_t &g, uint8_t &b, uint8_t &a) {
-    r = (color >>  0u) & 255u;
-    g = (color >>  8u) & 255u;
-    b = (color >> 16u) & 255u;
-    a = (color >> 24u) & 255u;
+bool load_texture(const std::string filename, std::vector<uint32_t> &texture, size_t &text_size, size_t &text_cnt) {
+    int nchannels = -1, w, h;
+    unsigned char *pixmap = stbi_load(filename.c_str(), &w, &h, &nchannels, 0);
+    if (!pixmap) {
+        std::cerr << "Error: can not load the textures" << std::endl;
+        return false;
+    }
+
+    if (4!=nchannels) {
+        std::cerr << "Error: the texture must be a 32 bit image" << std::endl;
+        stbi_image_free(pixmap);
+        return false;
+    }
+
+    text_cnt = w/h;
+    text_size = w/text_cnt;
+    if (w!=h*int(text_cnt)) {
+        std::cerr << "Error: the texture file must contain N square textures packed horizontally" << std::endl;
+        stbi_image_free(pixmap);
+        return false;
+    }
+
+    texture = std::vector<uint32_t>(w*h);
+    for (int j=0; j<h; j++) {
+        for (int i=0; i<w; i++) {
+            uint8_t r = pixmap[(i+j*w)*4+0];
+            uint8_t g = pixmap[(i+j*w)*4+1];
+            uint8_t b = pixmap[(i+j*w)*4+2];
+            uint8_t a = pixmap[(i+j*w)*4+3];
+            texture[i+j*w] = pack_color(r, g, b, a);
+        }
+    }
+    stbi_image_free(pixmap);
+    return true;
 }
 
 void draw_rectangle(std::vector<uint32_t> &frame, const size_t i_w, const size_t i_h, const uint32_t color, const size_t x, const size_t y, const size_t w, const size_t h) {
@@ -77,18 +109,6 @@ void draw_rectangle(std::vector<uint32_t> &frame, const size_t i_w, const size_t
     }
 }
 
-void drop_ppm_image(const std::string &filename, const std::vector<uint32_t> &image, const size_t w, const size_t h) {
-    assert(image.size() == w*h);
-    std::ofstream ofs(filename, std::ios::binary);
-    ofs << "P6" << std::endl << w << " " << h << std::endl << "255" << std::endl;
-    for (size_t i = 0; i < h*w; ++i) {
-        uint8_t r, g, b, a;
-        unpack_color(image[i], r, g, b, a);
-        ofs << static_cast<char>(r) << static_cast<char>(g) << static_cast<char>(b);
-    }
-    ofs.close();
-}
-
 const uint32_t white = pack_color(255, 255, 255);
 const uint32_t black = pack_color(0, 0, 0);
 const uint32_t gray = pack_color(160, 160, 160);
@@ -97,66 +117,75 @@ const uint32_t off_white = pack_color(249, 252, 241); //1
 const uint32_t red = pack_color(190, 83, 85); //2
 const uint32_t blue = pack_color(82, 107, 121);
 
-uint32_t getMapColor(const char m) {
-    switch (m) {
-        case '0':
-            return warm_gray;
-        case '1':
-            return off_white;
-        case '2':
-            return red;
-        case '3':
-            return blue;
-        default:
-            return white;
-    }
-}
-
-void drawMap(const size_t win_w, const size_t win_h, std::vector<uint32_t> &framebuffer, const size_t map_w, const size_t map_h, const char *map, const size_t rect_w, const size_t rect_h, uint32_t current_color) {// draw the map
+void drawMap(const size_t win_w, const size_t win_h, std::vector<uint32_t> &framebuffer, const std::vector<uint32_t> &wall_textures, size_t wall_texture_size, const size_t map_w, const size_t map_h, const char *map, const size_t rect_w, const size_t rect_h) {// draw the map
     for (size_t j = 0; j < map_h; j++) {
         for (size_t i = 0; i <map_w; i++) {
             if (map[i+j*map_w] == ' ') continue;
             size_t rect_x = i * rect_w;
             size_t rect_y = j * rect_h;
-            current_color = getMapColor(map[i+j*map_w]);
-            draw_rectangle(framebuffer, win_w, win_h, current_color, rect_x, rect_y, rect_w, rect_h);
+//            size_t current_color = getMapColor(map[i+j*map_w]);
+//            draw_rectangle(framebuffer, win_w, win_h, current_color, rect_x, rect_y, rect_w, rect_h);
+            size_t texture_id = int(map[i+j*map_w] - '0');
+            draw_rectangle(framebuffer, win_w, win_h, wall_textures[texture_id*wall_texture_size], rect_x, rect_y, rect_w, rect_h);
         }
     }
 }
 
-void drawPlayer(const size_t win_w, const size_t win_h, std::vector<uint32_t> &framebuffer, float player_x, float player_y, const size_t rect_w, const size_t rect_h) {
-    const size_t player_w = 5;
-    const size_t player_h = 5;
-    draw_rectangle(framebuffer, win_w, win_h, black, player_x*rect_w, player_y*rect_h, player_w, player_h);
-}
-
-void drawGazeLine(const size_t win_w, std::vector<uint32_t> &framebuffer, const size_t map_w, const char *map, float player_x, float player_y, float player_a, const size_t rect_w, const size_t rect_h) {
-    for (float c = 0; c < 20; c += .05) {
-        float x = player_x + c * cos(player_a);
-        float y = player_y + c * sin(player_a);
-        if (map[int(x) + int(y) * map_w] != ' ') break;
-        size_t px = x*rect_w;
-        size_t py = y*rect_h;
-        framebuffer[px + py*win_w] = black;
+void drawTexture(const size_t win_w, const std::vector<uint32_t> &wall_textures, size_t wall_texture_size, size_t wall_texture_count, std::vector<uint32_t> &framebuffer) {
+    const size_t texture_id = 4;
+    for (size_t i=0; i < wall_texture_size ; i++) {
+        for (size_t j=0; j < wall_texture_size; j++) {
+            framebuffer[i+j*win_w] = wall_textures[i + texture_id * wall_texture_size + j * wall_texture_size * wall_texture_count];
+        }
     }
 }
 
-void drawConeAndProjection(const size_t win_w, const size_t win_h, std::vector<uint32_t> &framebuffer, const size_t map_w, const char *map, float player_x, float player_y, float player_a, const float fov, const size_t rect_w, const size_t rect_h) {
+std::vector<uint32_t> getTextureColumn(const std::vector<uint32_t> &wall_textures, size_t wall_texture_size, size_t wall_texture_count, size_t texture_id, int texture_x_coord, size_t column_height) {
+    const size_t texture_w = wall_texture_size*wall_texture_count;
+    const size_t texture_h = wall_texture_size;
+    std::vector<uint32_t> column(column_height);
+    for (size_t y = 0; y < column_height; y++) {
+        size_t px = texture_id * wall_texture_size + texture_x_coord;
+        size_t py = (y * wall_texture_size) / column_height;
+        column[y] = wall_textures[px + py * texture_w];
+    }
+    return column;
+}
+
+void drawConeAndProjection(const size_t win_w, const size_t win_h, std::vector<uint32_t> &framebuffer, const std::vector<uint32_t> &wall_textures, size_t wall_texture_size, size_t wall_texture_count, const size_t map_w, const char *map, float player_x, float player_y, float player_a, const float fov, const size_t rect_w, const size_t rect_h) {
     for (size_t i = 0; i < win_w / 2; i++) { // sweep to have 1 ray for each column of the view image
         float angle = player_a - fov / 2 + fov * i / float(win_w/2); // calculate the line of sweeping the fov cone by calculating the new angle in radians
         for ( float c = 0; c < 20; c += .05) {
             float cx = player_x + c * cos(angle);
             float cy = player_y + c * sin(angle);
-            size_t px = cx*rect_w;
-            size_t py = cy*rect_h;
+            int px = cx*rect_w;
+            int py = cy*rect_h;
             framebuffer[px + py*win_w] = gray; // draw the cone
             if (map[int(cx) + int(cy) * map_w] != ' ') {
+                size_t texture_id = int(map[int(cx) + int(cy) * map_w] - '0');
                 size_t column_height = win_h/(c*cos(angle-player_a)); // full height (win_h) * size of column (1/c) to get proportional size of column
-                draw_rectangle(framebuffer, win_w, win_h, getMapColor(map[int(cx) + int(cy) * map_w]), win_w/2+i, win_h/2-column_height/2, 1, column_height);
+
+                float hit_x = cx - floor(cx + .5);  // these are the fractional parts of where we hit the wall
+                float hit_y = cy - floor(cy + .5);  // they dictate how far away from the intersection of the map gridlines we are, and therefore how far into the texture
+                int texture_coord_x = hit_x * wall_texture_size;
+                if (std::abs(hit_y) > std::abs(hit_x)) { // are we a "vertical" or "horizontal" wall wrt the map tile...i.e. we may be sliding along the edge and need to ID the correct texture to use
+                    texture_coord_x = hit_y * wall_texture_size;
+                }
+                if (texture_coord_x < 0) texture_coord_x += wall_texture_size; //this can go negative...fix it
+
+                std::vector<uint32_t> column = getTextureColumn(wall_textures, wall_texture_size, wall_texture_count, texture_id, texture_coord_x, column_height);
+
+                px = win_w/2+i;
+                for (size_t j=0; j < column_height; j++) {
+                    py = j + win_h/2-column_height/2;
+                    if (py < 0 || py >= (int) win_h) continue;
+                    framebuffer[px + py * win_w] = column[j];
+                }
                 break;
             }
         }
     }
+
 }
 
 int main(int argc, char **argv) {
@@ -167,6 +196,7 @@ int main(int argc, char **argv) {
             std::cout << "Loading Failed" << std::endl;
         } else {
             bool quit = false;
+            bool rotate = true;
 
             const size_t win_w = SCREEN_WIDTH; // image width
             const size_t win_h = SCREEN_HEIGHT; // image height
@@ -174,22 +204,22 @@ int main(int argc, char **argv) {
 
             const size_t map_w = 16;
             const size_t map_h = 16;
-            const char map[] =  "0001111111110000"\
-                                "2              0"\
-                                "2      22222   0"\
-                                "2     0        0"\
-                                "0     0  2220000"\
+            const char map[] =  "0002222222220000"\
+                                "1              0"\
+                                "1      11111   0"\
+                                "1     0        0"\
+                                "0     0  1110000"\
                                 "0     3        0"\
-                                "0   20000      0"\
-                                "0   0   22200  0"\
-                                "0   0   0      0"\
-                                "0   0   2  00000"\
-                                "0       2      0"\
-                                "1       2      0"\
+                                "0   10000      0"\
+                                "0   3   11100  0"\
+                                "5   4   0      0"\
+                                "5   4   1  00000"\
+                                "0       1      0"\
+                                "2       1      0"\
                                 "0       0      0"\
                                 "0 0000000      0"\
                                 "0              0"\
-                                "0001111111100000";
+                                "0002222222200000";
 
             float player_x = 3.456;
             float player_y = 2.345;
@@ -200,7 +230,13 @@ int main(int argc, char **argv) {
             const size_t rect_w = win_w / (map_w*2);
             const size_t rect_h = win_h / map_h;
 
-            uint32_t current_color = white;
+            std::vector<uint32_t> wall_textures;
+            size_t wall_texture_size;
+            size_t wall_texture_count;
+
+            if (!load_texture("./res/walltextures.png", wall_textures, wall_texture_size, wall_texture_count)) {
+                std::cerr << "Failed to load wall textures" << std::endl;
+            }
 
             std::vector<uint32_t> framebuffer(win_w*win_h, white); // the image itself, initialized to white
             framebuffer_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, SCREEN_WIDTH, SCREEN_HEIGHT);
@@ -218,25 +254,28 @@ int main(int argc, char **argv) {
                     }
                     if (event.type == SDL_KEYDOWN && event.key.repeat == 0) {
                         switch (event.key.keysym.sym) {
-//                            case SDLK_1:
-//                                fps_on = !fps_on;
-//                                break;
+                            case SDLK_1:
+                                rotate = !rotate;
+                                break;
                         }
                     }
                 }
 
-                if (frame_delay == 0) {
-                    frame_delay = 5;
-                    player_a += fov_degree;
-                } else {
-                    frame_delay -= 1;
+                if (rotate) {
+                    if (frame_delay == 0) {
+                        frame_delay = 5;
+                        player_a += fov_degree;
+                    } else {
+                        frame_delay -= 1;
+                    }
                 }
+
                 framebuffer = std::vector<uint32_t>(win_w*win_h, white); //clear screen
 
-                drawMap(win_w, win_h, framebuffer, map_w, map_h, map, rect_w, rect_h, current_color);
-//                drawPlayer(win_w, win_h, framebuffer, player_x, player_y, rect_w, rect_h);
-//                drawGazeLine(win_w, framebuffer, map_w, map, player_x, player_y, player_a, rect_w, rect_h);
-                drawConeAndProjection(win_w, win_h, framebuffer, map_w, map, player_x, player_y, player_a, fov, rect_w, rect_h);
+                drawMap(win_w, win_h, framebuffer, wall_textures, wall_texture_size, map_w, map_h, map, rect_w, rect_h);
+                drawConeAndProjection(win_w, win_h, framebuffer, wall_textures, wall_texture_size, wall_texture_count, map_w, map, player_x, player_y, player_a, fov, rect_w, rect_h);
+
+                drawTexture(win_w, wall_textures, wall_texture_size, wall_texture_count, framebuffer);
 
                 SDL_UpdateTexture(framebuffer_texture, NULL, reinterpret_cast<void *>(framebuffer.data()), SCREEN_WIDTH*4);
 
@@ -244,7 +283,6 @@ int main(int argc, char **argv) {
                 SDL_RenderCopy(renderer, framebuffer_texture, NULL, NULL);
                 SDL_RenderPresent(renderer);
             }
-//            drop_ppm_image("./out.ppm", framebuffer, win_w, win_h);
         }
     }
     close();
