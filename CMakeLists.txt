@@ -17,7 +17,7 @@ set(SDL2_LINK mingw32 SDL2main SDL2 SDL2_image SDL2_ttf)
 set(GL_LINK OpenGL32 glu32 glew32)
 
 add_executable(gtn guess_the_number.cpp)
-add_executable(hangman hangman.cpp)
+add_executable(hangman hangman.cpp term.h)
 add_executable(ttt tic_tac_toe.cpp)
 add_executable(rps rock_paper_scissors.cpp)
 add_executable(breakout breakout.cpp)

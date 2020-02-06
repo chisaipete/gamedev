@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <ctype.h>
+#include "term.h"
 // #include <libtcod.hpp>
 
 // https://stackoverflow.com/questions/7617587/is-there-an-alternative-to-using-time-to-seed-a-random-number-generation
@@ -14,7 +15,7 @@ unsigned long long rdtsc(){
 }
 
 std::string get_word() {
-    std::string filename = "res/shakespeare.txt";
+    std::string filename = "res/words.txt";
     std::ifstream istrm(filename);
     std::string word;
     int num_words = 29245; //magic number, length of file @ one word per line
@@ -104,6 +105,7 @@ int main(int argc, char **argv){
         std::string guessed;
 
         while (not_dead) {
+            term::clearScreen();
             draw_hangman(bad_guesses);
             unguessed_letters = draw_word(answer, guessed);
             std::cout << "Guesses: " << guessed << std::endl;
